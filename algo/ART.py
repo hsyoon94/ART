@@ -1,9 +1,9 @@
 import torch
 import torch.nn as nn
 
-class SIRT(nn.Module):
+class ART(nn.Module):
     def __init__(self, input_dim, input_channel_num, output_dim, device):
-        super(SIRT, self).__init__()
+        super(ART, self).__init__()
         self.input_dim = input_dim
         self.input_channel_num = input_channel_num
         self.output_dim = output_dim
@@ -24,4 +24,4 @@ class SIRT(nn.Module):
         output = self.MaxPool(output)
         output = self.F1(output)
 
-        return 
+        return output

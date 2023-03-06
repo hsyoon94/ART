@@ -1,0 +1,4 @@
+*.csv
+runs/
+trained_modesl/
+__pycache__

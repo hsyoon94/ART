@@ -1,29 +1,70 @@
 import numpy as np
 import torch
 from algo.ART import ART
-from algo.coreset 
+from algo.coreset import CoresetBuffer
+from dataparser.dataparser import raw_data_parser
+from arguments import get_args
+from torch.utils.data import DataLoader
+from torch.utils.tensorboard import SummaryWriter
+import os
+
+import torch.nn as nn
+import torch.optim as optim
+
 import csv
 
 is_cuda = torch.cuda.is_available()
 device = torch.device('cuda' if is_cuda else 'cpu')
 
+args = get_args()
+
 def main():
-    # Network definition
-    network = ART(5, 3, 3, device)    
-
-    # Coreset Initialization with minimum # of data
-    f = open("dataparser/data.csv")
-    rdr = csv.reader(f)
-
-    for line in rdr:
-        tmp_ipt = line[0]
-        tmp_opt = line[1]        
+    
+    model = ART(args.c_n_grid_size, args.c_n_grid_channel, args.c_r_class_num, device)
+    loss_function = nn.MSELoss()
+    optimizer = optim.Adam(model.parameters(), args.lr)
+    writer = SummaryWriter()
+    coreset, new_ipt, new_opt = raw_data_parser(args)
+    
+    for cycle_idx in range(args.training_cycle):
+        print("Training cycle", cycle_idx, "/", args.training_cycle, "starts")
         
-    # Training starts with coreset
+        dl = DataLoader(coreset, batch_size=2, shuffle=True, sampler=None, num_workers=0, pin_memory=False, drop_last=True)
+        diter = iter(dl)
 
-        # Training with current coreset
+        train(args, model, diter, dl, args.iteration, cycle_idx, loss_function, optimizer, writer, device)
+        writer.flush()
+        coreset.append(new_ipt, new_opt)
+
+        torch.save(model, os.path.join(args.model_save_dir, "model.pt"))
+
+def train(args, model, diter, dl, iteration, cycle, criteria, optimizer, writer, device):
+    for iter_tmp in range(args.iteration):
+        try:
+            c_n, c_r = next(diter)
+        except StopIteration:
+            diter = iter(dl)
+            c_n, c_r = next(diter)
         
-        # update coreset
+        c_n = c_n.type(torch.FloatTensor)
+        c_r = c_r.type(torch.FloatTensor)
+        c_n = torch.squeeze(c_n).to(device)
+        
+        c_n = c_n.to(device)
+        c_r = c_r.to(device)
+
+        output = model(c_n).squeeze()
+
+        loss = criteria(output, c_r)
+        loss.retain_grad()
+        loss.backward()
+        optimizer.step()
+
+        writer.add_scalar("loss", loss.item(), cycle*args.iteration+iter_tmp)
+
+        if iter_tmp % (args.iteration/5) == 0:
+            print("Loss:", loss.item())
+
 
 if __name__ == '__main__':
     main()

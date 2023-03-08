@@ -1,4 +1,4 @@
 *.csv
 runs/
-trained_modesl/
+trained_models/
 __pycache__

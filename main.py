@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 from algo.ART import ART
-from algo.coreset import CoresetBuffer
+from algo.coreset import DatasetBuffer
 from dataparser.dataparser import raw_data_parser
 from arguments import get_args
 from torch.utils.data import DataLoader
@@ -24,8 +24,17 @@ def main():
     loss_function = nn.MSELoss()
     optimizer = optim.Adam(model.parameters(), args.lr)
     writer = SummaryWriter()
-    coreset, new_ipt, new_opt = raw_data_parser(args)
-    
+
+    # Get full rosbag dataset for offline operation
+    full_rosbag_dataset = raw_data_parser(args)
+
+    # Coreset Initialization
+    coreset = DatasetBuffer(args.coreset_buffer_size, args.c_r_class_num)
+    for i in range(args.coreset_buffer_size):
+        coreset.append(full_rosbag_dataset[i][0], full_rosbag_dataset[i][1])
+
+    full_data_index = args.coreset_buffer_size
+
     for cycle_idx in range(args.training_cycle):
         print("Training cycle", cycle_idx, "/", args.training_cycle, "starts")
         
@@ -34,7 +43,13 @@ def main():
 
         train(args, model, diter, dl, args.iteration, cycle_idx, loss_function, optimizer, writer, device)
         writer.flush()
-        coreset.append(new_ipt, new_opt)
+
+        new_data_ipt = full_rosbag_dataset[full_data_index][0]
+        new_data_opt = full_rosbag_dataset[full_data_index][1]
+        print("New data comes as input:", new_data_ipt, ", output:", new_data_opt)
+        
+        coreset.append(new_data_ipt, new_data_opt)
+        full_data_index = full_data_index + 1
 
         torch.save(model, os.path.join(args.model_save_dir, "model.pt"))
 
@@ -47,8 +62,8 @@ def train(args, model, diter, dl, iteration, cycle, criteria, optimizer, writer,
             c_n, c_r = next(diter)
         
         c_n = c_n.type(torch.FloatTensor)
-        c_r = c_r.type(torch.FloatTensor)
         c_n = torch.squeeze(c_n).to(device)
+        c_r = c_r.type(torch.FloatTensor)
         
         c_n = c_n.to(device)
         c_r = c_r.to(device)

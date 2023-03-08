@@ -7,6 +7,7 @@ class ART(nn.Module):
         self.input_dim = input_dim
         self.input_channel_num = input_channel_num
         self.output_dim = output_dim
+        
         self.device = device
         self.cnn_mid_channel = 8
         
@@ -16,7 +17,7 @@ class ART(nn.Module):
 
         self.CNN = nn.Conv2d(self.input_channel_num, self.cnn_mid_channel, 3, stride=1).to(self.device)
         self.MaxPool = nn.MaxPool2d(3, 1).to(self.device)
-        self.F1 = nn.Linear(8, output_dim).to(self.device)
+        self.F1 = nn.Linear(288, output_dim).to(self.device)
         
     def forward(self, input):
         

@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+import sys
+sys.path.append('../algo')
+
 
 import numpy as np
 import rosbag
@@ -7,8 +10,8 @@ from matplotlib import pyplot as plt
 from scipy import signal
 import math
 import csv
-from algo.coreset import CoresetBuffer
 import os
+
 
 bag = rosbag.Bag('/media/hsyoon94/HS_SDD/bagfiles/230201/visky_2023-02-01-15-34-49.bag')
 
@@ -19,6 +22,8 @@ imu_topic = '/imu/data'
 costmap_data = list()
 odom_data = list()
 imu_data = list()
+SHAPE_SIZE = 10
+MAP_GRID_LENGTH = 0
 
 def main():
     
@@ -30,7 +35,7 @@ def main():
     for topic, msg, t in bag.read_messages(topics=[costmap_topic, odom_topic, imu_topic]):
         if topic == costmap_topic:
             costmap_data.append(msg.data)
-        
+
         elif topic == odom_topic:
             odom_data.append(msg)
 
@@ -42,53 +47,105 @@ def main():
     len_imu = len(imu_data)
     len_odom = len(odom_data)
 
-    count = 0
-
-    for costmap_data_element in costmap_data:
-
+    timestep = 0
+    RECORDING_START = True
+    frequency_for_every_quatsec_cost_map = 1
+    frequency_for_every_quatsec_cost_odom = 3
+    frequency_for_every_quatsec_cost_imu = 100
+    
+    for timestep_for_quatsec in range(int(len_imu/400)):
+        costmap_idx = timestep_for_quatsec * frequency_for_every_quatsec_cost_map # 0, 1, 2, ...
+        odom_cur_idx = timestep_for_quatsec * frequency_for_every_quatsec_cost_odom # 0, 3, 6, 9, ...
+        odom_fut_idx = (timestep_for_quatsec + 1) * frequency_for_every_quatsec_cost_odom # 0, 3, 6, 9, ...
+        imu_idx = timestep_for_quatsec * frequency_for_every_quatsec_cost_imu # 0, 100, 200, 300, ...
+        
+        costmap_data_element = costmap_data[costmap_idx]
         input_1d_array_len = len(costmap_data_element)
         
-        output_2d_array_size = math.sqrt(input_1d_array_len)
-        output_2d_array_size = int(output_2d_array_size)
-        output_2d_array = np.zeros((output_2d_array_size, output_2d_array_size))
-
-        for row_idx in range(output_2d_array_size):
-            for col_idx in range(output_2d_array_size):
-                output_2d_array[row_idx][col_idx] = costmap_data_element[row_idx*output_2d_array_size + col_idx]
+        full_output_2d_array_size = int(math.sqrt(input_1d_array_len))
+        print("full_output_2d_array_size", full_output_2d_array_size)
+        MAP_GRID_LENGTH = 20 / full_output_2d_array_size
         
-        shape_size = 5
-        slice_start_idx = 0
-        output_2d_array = output_2d_array[slice_start_idx:slice_start_idx+shape_size, slice_start_idx:slice_start_idx+shape_size]
-        output_2d_array = np.reshape(output_2d_array, (1,shape_size*shape_size))
-        print(output_2d_array)
-        print(np.shape(output_2d_array))
+        output_2d_array = np.zeros((full_output_2d_array_size, full_output_2d_array_size))
 
-        imu_sig_numpy = np.array(imu_data[0:100])
+        for row_idx in range(full_output_2d_array_size):
+            for col_idx in range(full_output_2d_array_size):
+                output_2d_array[row_idx][col_idx] = costmap_data_element[row_idx*full_output_2d_array_size + col_idx]
+        
+
+        # Convert global pose (from odometry) to local pose in costmap
+        origin_x = odom_data[odom_cur_idx].pose.pose.position.x
+        origin_y = odom_data[odom_fut_idx].pose.pose.position.y
+
+        cur_x_global = odom_data[odom_fut_idx].pose.pose.position.x
+        cur_y_global = odom_data[odom_fut_idx].pose.pose.position.y
+
+        cur_x_local = int((cur_x_global - origin_x) / full_output_2d_array_size) + int(full_output_2d_array_size / 2)
+        cur_y_local = int((cur_y_global - origin_y) / full_output_2d_array_size) + int(full_output_2d_array_size / 2)
+        
+        # Get wheel local pose (ToDo: consider rotation)              
+        wheel_lf_x = cur_x_local + int(0.01 / MAP_GRID_LENGTH)
+        wheel_lf_y = cur_y_local - int(0.02 / MAP_GRID_LENGTH)
+
+        wheel_rf_x = cur_x_local + int(0.01 / MAP_GRID_LENGTH)
+        wheel_rf_y = cur_y_local + int(0.02 / MAP_GRID_LENGTH)
+
+        wheel_lr_x = cur_x_local - int(0.01 / MAP_GRID_LENGTH)
+        wheel_lr_y = cur_y_local - int(0.02 / MAP_GRID_LENGTH)
+
+        wheel_rr_x = cur_x_local - int(0.01 / MAP_GRID_LENGTH)
+        wheel_rr_y = cur_y_local + int(0.02 / MAP_GRID_LENGTH)
+
+        patch_lf = output_2d_array[wheel_lf_x-int(SHAPE_SIZE / (2 * 2)):wheel_lf_x+int(SHAPE_SIZE / (2 * 2)) + 1, wheel_lf_y-int(SHAPE_SIZE / (2 * 2)):wheel_lf_y+int(SHAPE_SIZE / (2 * 2)) + 1]
+        patch_rf = output_2d_array[wheel_rf_x-int(SHAPE_SIZE / (2 * 2)):wheel_rf_x+int(SHAPE_SIZE / (2 * 2)) + 1, wheel_rf_y-int(SHAPE_SIZE / (2 * 2)):wheel_rf_y+int(SHAPE_SIZE / (2 * 2)) + 1]
+
+        patch_lr = output_2d_array[wheel_lr_x-int(SHAPE_SIZE / (2 * 2)):wheel_lr_x+int(SHAPE_SIZE / (2 * 2)) + 1, wheel_lr_y-int(SHAPE_SIZE / (2 * 2)):wheel_lr_y+int(SHAPE_SIZE / (2 * 2)) + 1]
+        patch_rr = output_2d_array[wheel_rr_x-int(SHAPE_SIZE / (2 * 2)):wheel_rr_x+int(SHAPE_SIZE / (2 * 2)) + 1, wheel_rr_y-int(SHAPE_SIZE / (2 * 2)):wheel_rr_y+int(SHAPE_SIZE / (2 * 2)) + 1]
+
+        final_patch=np.zeros((SHAPE_SIZE, SHAPE_SIZE))
+        final_patch[0:int(SHAPE_SIZE/2), 0:int(SHAPE_SIZE/2)] = patch_lf
+        final_patch[int(SHAPE_SIZE/2):SHAPE_SIZE, 0:int(SHAPE_SIZE/2)] = patch_rf
+        final_patch[0:int(SHAPE_SIZE/2), int(SHAPE_SIZE/2):SHAPE_SIZE] = patch_lr
+        final_patch[int(SHAPE_SIZE/2):SHAPE_SIZE, int(SHAPE_SIZE/2):SHAPE_SIZE] = patch_rr
+
+        print("patch_lf", patch_lf)
+
+        final_patch = np.reshape(final_patch,(1,100))
+        
+        imu_sig_numpy = np.array(imu_data[imu_idx:imu_idx+frequency_for_every_quatsec_cost_imu])
         freqs, psd = signal.welch(x=imu_sig_numpy, fs=400.0)
+
+        # plt.semilogy(freqs, psd)
+        # plt.xlabel('frequency [Hz]')
+        # plt.ylabel('PSD')
+        # plt.show()
 
         traversability = 0
 
         for freq_idx in range(len(freqs)):
             if 0 <= freqs[freq_idx] <= 30:
                 traversability = traversability + psd[freq_idx]
-        
+        print("traversability", traversability)
+
         with open("data_c_n_r.csv", "ab") as fr:
-            np.savetxt(fr,output_2d_array)
+            np.savetxt(fr,final_patch)
 
         with open("data_c_n_b.csv", "ab") as fb:
-            np.savetxt(fb,output_2d_array)
+            np.savetxt(fb,final_patch)
 
         with open("data_c_n_s.csv", "ab") as fs:
-            np.savetxt(fs,output_2d_array)
+            np.savetxt(fs,final_patch)
         
         file_writer.writerow([traversability])
-
-        count = count + 1
-
-    print("Data length:", count)
+        
+        timestep = timestep + 1
+    print("Data length:", timestep)
 
 def raw_data_parser(args):
-    coreset = CoresetBuffer(args.coreset_buffer_size, args.c_r_class_num)
+
+    from algo.coreset import DatasetBuffer
+
+    coreset = DatasetBuffer(100000, args.c_r_class_num)
     f_c_n_s = np.loadtxt(os.path.join(args.dataset_dir, "data_c_n_s.csv"))
     f_c_n_r = np.loadtxt(os.path.join(args.dataset_dir, "data_c_n_r.csv"))
     f_c_n_b = np.loadtxt(os.path.join(args.dataset_dir, "data_c_n_b.csv"))
@@ -110,6 +167,8 @@ def raw_data_parser(args):
         
         tmp_ipt = np.array([tmp_ipt_s, tmp_ipt_r, tmp_ipt_b])
         
+
+
         tmp_opt = line[0]
         coreset.append(tmp_ipt, tmp_opt)
         count = count + 1
@@ -117,7 +176,7 @@ def raw_data_parser(args):
         new_ipt = tmp_ipt
         new_opt = tmp_opt
     
-    return coreset, new_ipt, new_opt
+    return coreset
 
 if __name__ == '__main__':
     main()

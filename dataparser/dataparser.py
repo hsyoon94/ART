@@ -28,7 +28,9 @@ MAP_GRID_LENGTH = 0
 def main():
     
     file_write = open('data_c_r.csv', 'w', newline="")
+    file_write_c = open('data_c_r_c.csv', 'w', newline="")
     file_writer = csv.writer(file_write)
+    file_writer_c = csv.writer(file_write_c)
 
     occupancy_grid = np.array([])
     
@@ -63,7 +65,6 @@ def main():
         input_1d_array_len = len(costmap_data_element)
         
         full_output_2d_array_size = int(math.sqrt(input_1d_array_len))
-        print("full_output_2d_array_size", full_output_2d_array_size)
         MAP_GRID_LENGTH = 20 / full_output_2d_array_size
         
         output_2d_array = np.zeros((full_output_2d_array_size, full_output_2d_array_size))
@@ -121,11 +122,19 @@ def main():
         # plt.show()
 
         traversability = 0
-
+        traversability_class = np.zeros(shape=(3,))
+        # Traversability regression
         for freq_idx in range(len(freqs)):
             if 0 <= freqs[freq_idx] <= 30:
                 traversability = traversability + psd[freq_idx]
-        print("traversability", traversability)
+        
+        # Traversability classification
+        if 0 <= traversability <= 10:
+            traversability_class[0] = 1
+        elif 10 < traversability <= 20:
+            traversability_class[1] = 1
+        else:
+            traversability_class[2] = 1
 
         with open("data_c_n_r.csv", "ab") as fr:
             np.savetxt(fr,final_patch)
@@ -136,7 +145,8 @@ def main():
         with open("data_c_n_s.csv", "ab") as fs:
             np.savetxt(fs,final_patch)
         
-        file_writer.writerow([traversability])
+        file_writer.writerow([traversability]) 
+        file_writer_c.writerow(traversability_class)
         
         timestep = timestep + 1
     print("Data length:", timestep)
@@ -150,7 +160,11 @@ def raw_data_parser(args):
     f_c_n_r = np.loadtxt(os.path.join(args.dataset_dir, "data_c_n_r.csv"))
     f_c_n_b = np.loadtxt(os.path.join(args.dataset_dir, "data_c_n_b.csv"))
 
-    f_c_r = open(os.path.join(args.dataset_dir, "data_c_r.csv"))
+    if args.c_r_class_num == 1:
+        f_c_r = open(os.path.join(args.dataset_dir, "data_c_r.csv"))
+    else:
+        f_c_r = open(os.path.join(args.dataset_dir, "data_c_r_c.csv"))
+
     rdr = csv.reader(f_c_r)
     count = 0
     new_ipt = None
@@ -166,10 +180,12 @@ def raw_data_parser(args):
         tmp_ipt_b = np.reshape(tmp_ipt_b, (args.c_n_grid_size, args.c_n_grid_size))
         
         tmp_ipt = np.array([tmp_ipt_s, tmp_ipt_r, tmp_ipt_b])
+        if args.c_r_class_num == 1:
+            tmp_opt = float(line[0])
+        else:
+            tmp_opt = [float(item) for item in line]
+            tmp_opt = np.array(tmp_opt)
         
-
-
-        tmp_opt = line[0]
         coreset.append(tmp_ipt, tmp_opt)
         count = count + 1
 

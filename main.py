@@ -21,7 +21,11 @@ args = get_args()
 def main():
     
     model = ART(args.c_n_grid_size, args.c_n_grid_channel, args.c_r_class_num, device)
-    loss_function = nn.MSELoss()
+    if args.c_r_class_num ==1 :
+        loss_function = nn.MSELoss()
+    else:
+        loss_function = nn.CrossEntropyLoss()
+        
     optimizer = optim.Adam(model.parameters(), args.lr)
     writer = SummaryWriter()
 
@@ -69,7 +73,6 @@ def train(args, model, diter, dl, iteration, cycle, criteria, optimizer, writer,
         c_r = c_r.to(device)
 
         output = model(c_n).squeeze()
-
         loss = criteria(output, c_r)
         loss.retain_grad()
         loss.backward()

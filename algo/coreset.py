@@ -21,7 +21,7 @@ class DatasetBuffer(Dataset):
             self.c_r.pop()
 
         ipt_post = np.array([ipt])
-        opt_post = float(opt)
+        opt_post = opt
 
         self.c_n.append(ipt_post)
         self.c_r.append(opt_post)

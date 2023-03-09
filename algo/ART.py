@@ -17,13 +17,29 @@ class ART(nn.Module):
 
         self.CNN = nn.Conv2d(self.input_channel_num, self.cnn_mid_channel, 3, stride=1).to(self.device)
         self.MaxPool = nn.MaxPool2d(3, 1).to(self.device)
-        self.F1 = nn.Linear(288, output_dim).to(self.device)
+        
+
+        # For regression task NN
+        if self.output_dim == 1:
+            self.F1 = nn.Linear(288, self.output_dim).to(self.device)
+        else:
+            self.F1 = nn.Linear(288, 32).to(self.device)
+            self.F2 = nn.Linear(32, self.output_dim).to(self.device)
         
     def forward(self, input):
-        
-        output = self.CNN(input)
-        output = self.MaxPool(output)
-        output = torch.flatten(output, start_dim=1)
-        output = self.F1(output)
+        output = 0
+
+        if self.output_dim == 1:
+            output = self.CNN(input)
+            output = self.MaxPool(output)
+            output = torch.flatten(output, start_dim=1)
+            output = self.F1(output)
+        else:
+            output = self.CNN(input)
+            output = self.MaxPool(output)
+            output = torch.flatten(output, start_dim=1)
+            output = self.F1(output)
+            output = self.F2(output)
+            # output = self.Softmax(output)
         
         return output

@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 from algo.ART import ART
-from algo.coreset import DatasetBuffer
+from algo.DatasetBuffer import DatasetBuffer
 from dataparser.dataparser import raw_data_parser
 from arguments import get_args
 from torch.utils.data import DataLoader
@@ -25,7 +25,7 @@ def main():
         loss_function = nn.MSELoss()
     else:
         loss_function = nn.CrossEntropyLoss()
-        
+
     optimizer = optim.Adam(model.parameters(), args.lr)
     writer = SummaryWriter()
 
@@ -33,7 +33,7 @@ def main():
     full_rosbag_dataset = raw_data_parser(args)
 
     # Coreset Initialization
-    coreset = DatasetBuffer(args.coreset_buffer_size, args.c_r_class_num)
+    coreset = DatasetBuffer(args.coreset_buffer_size, args.coreset_type, args.c_r_class_num)
     for i in range(args.coreset_buffer_size):
         coreset.append(full_rosbag_dataset[i][0], full_rosbag_dataset[i][1])
 
@@ -79,7 +79,7 @@ def train(args, model, diter, dl, iteration, cycle, criteria, optimizer, writer,
         optimizer.step()
 
         writer.add_scalar("loss", loss.item(), cycle*args.iteration+iter_tmp)
-
+        
         if iter_tmp % (args.iteration/5) == 0:
             print("Loss:", loss.item())
 

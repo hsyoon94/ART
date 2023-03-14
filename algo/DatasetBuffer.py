@@ -9,8 +9,9 @@ import numpy as np
 
 # Mini batch manager
 class DatasetBuffer(Dataset):
-    def __init__(self, buffer_size, class_num):
+    def __init__(self, buffer_size, buffer_type, class_num):
         self.buffer_size = buffer_size
+        self.buffer_type = buffer_type
         self.class_num = class_num
         self.c_n = list()
         self.c_r = list()

@@ -16,7 +16,7 @@ import os
 bag = rosbag.Bag('/media/hsyoon94/HS_SDD/bagfiles/230201/visky_2023-02-01-15-34-49.bag')
 
 odom_topic = '/aft_mapped_to_init'
-costmap_topic = '/traversability_costmap_visualize'
+costmap_topic = '/traversability_costmap'
 imu_topic = '/imu/data'
 
 costmap_data = list()
@@ -42,7 +42,6 @@ def main():
             odom_data.append(msg)
 
         elif topic == imu_topic:
-            # imu_tmp = list([msg.orientation.x, msg.orientation.y, msg.orientation.z, msg.angular_velocity.x, msg.angular_velocity.y, msg.angular_velocity.z])
             imu_data.append(msg.orientation.z)
 
     len_costmap = len(costmap_data)
@@ -73,29 +72,17 @@ def main():
             for col_idx in range(full_output_2d_array_size):
                 output_2d_array[row_idx][col_idx] = costmap_data_element[row_idx*full_output_2d_array_size + col_idx]
         
+        wheel_lf_x = int(full_output_2d_array_size/2 - (odom_data[odom_fut_idx].pose.pose.position.y-odom_data[odom_cur_idx].pose.pose.position.y)/MAP_GRID_LENGTH - 1*math.sin(odom_data[odom_fut_idx].pose.pose.orientation.x) - 2*math.cos(odom_data[odom_fut_idx].pose.pose.orientation.x))
+        wheel_lf_y = int(full_output_2d_array_size/2 + (odom_data[odom_fut_idx].pose.pose.position.x-odom_data[odom_cur_idx].pose.pose.position.x)/MAP_GRID_LENGTH - 1*math.cos(odom_data[odom_fut_idx].pose.pose.orientation.x) + 2*math.sin(odom_data[odom_fut_idx].pose.pose.orientation.x))
 
-        # Convert global pose (from odometry) to local pose in costmap
-        origin_x = odom_data[odom_cur_idx].pose.pose.position.x
-        origin_y = odom_data[odom_fut_idx].pose.pose.position.y
+        wheel_rf_x = int(full_output_2d_array_size/2 - (odom_data[odom_fut_idx].pose.pose.position.y-odom_data[odom_cur_idx].pose.pose.position.y)/MAP_GRID_LENGTH + 1*math.sin(odom_data[odom_fut_idx].pose.pose.orientation.x) - 2*math.cos(odom_data[odom_fut_idx].pose.pose.orientation.x))
+        wheel_rf_y = int(full_output_2d_array_size/2 + (odom_data[odom_fut_idx].pose.pose.position.x-odom_data[odom_cur_idx].pose.pose.position.x)/MAP_GRID_LENGTH + 1*math.cos(odom_data[odom_fut_idx].pose.pose.orientation.x) + 2*math.sin(odom_data[odom_fut_idx].pose.pose.orientation.x))
 
-        cur_x_global = odom_data[odom_fut_idx].pose.pose.position.x
-        cur_y_global = odom_data[odom_fut_idx].pose.pose.position.y
+        wheel_lr_x = int(full_output_2d_array_size/2 - (odom_data[odom_fut_idx].pose.pose.position.y-odom_data[odom_cur_idx].pose.pose.position.y)/MAP_GRID_LENGTH - 1*math.sin(odom_data[odom_fut_idx].pose.pose.orientation.x) + 2*math.cos(odom_data[odom_fut_idx].pose.pose.orientation.x))
+        wheel_lr_y = int(full_output_2d_array_size/2 + (odom_data[odom_fut_idx].pose.pose.position.x-odom_data[odom_cur_idx].pose.pose.position.x)/MAP_GRID_LENGTH - 1*math.cos(odom_data[odom_fut_idx].pose.pose.orientation.x) - 2*math.sin(odom_data[odom_fut_idx].pose.pose.orientation.x))
 
-        cur_x_local = int((cur_x_global - origin_x) / full_output_2d_array_size) + int(full_output_2d_array_size / 2)
-        cur_y_local = int((cur_y_global - origin_y) / full_output_2d_array_size) + int(full_output_2d_array_size / 2)
-        
-        # Get wheel local pose (ToDo: consider rotation)              
-        wheel_lf_x = cur_x_local + int(0.01 / MAP_GRID_LENGTH)
-        wheel_lf_y = cur_y_local - int(0.02 / MAP_GRID_LENGTH)
-
-        wheel_rf_x = cur_x_local + int(0.01 / MAP_GRID_LENGTH)
-        wheel_rf_y = cur_y_local + int(0.02 / MAP_GRID_LENGTH)
-
-        wheel_lr_x = cur_x_local - int(0.01 / MAP_GRID_LENGTH)
-        wheel_lr_y = cur_y_local - int(0.02 / MAP_GRID_LENGTH)
-
-        wheel_rr_x = cur_x_local - int(0.01 / MAP_GRID_LENGTH)
-        wheel_rr_y = cur_y_local + int(0.02 / MAP_GRID_LENGTH)
+        wheel_rr_x = int(full_output_2d_array_size/2 - (odom_data[odom_fut_idx].pose.pose.position.y-odom_data[odom_cur_idx].pose.pose.position.y)/MAP_GRID_LENGTH + 1*math.sin(odom_data[odom_fut_idx].pose.pose.orientation.x) + 2*math.cos(odom_data[odom_fut_idx].pose.pose.orientation.x))
+        wheel_rr_y = int(full_output_2d_array_size/2 + (odom_data[odom_fut_idx].pose.pose.position.x-odom_data[odom_cur_idx].pose.pose.position.x)/MAP_GRID_LENGTH + 1*math.cos(odom_data[odom_fut_idx].pose.pose.orientation.x) - 2*math.sin(odom_data[odom_fut_idx].pose.pose.orientation.x))
 
         patch_lf = output_2d_array[wheel_lf_x-int(SHAPE_SIZE / (2 * 2)):wheel_lf_x+int(SHAPE_SIZE / (2 * 2)) + 1, wheel_lf_y-int(SHAPE_SIZE / (2 * 2)):wheel_lf_y+int(SHAPE_SIZE / (2 * 2)) + 1]
         patch_rf = output_2d_array[wheel_rf_x-int(SHAPE_SIZE / (2 * 2)):wheel_rf_x+int(SHAPE_SIZE / (2 * 2)) + 1, wheel_rf_y-int(SHAPE_SIZE / (2 * 2)):wheel_rf_y+int(SHAPE_SIZE / (2 * 2)) + 1]
@@ -109,20 +96,14 @@ def main():
         final_patch[0:int(SHAPE_SIZE/2), int(SHAPE_SIZE/2):SHAPE_SIZE] = patch_lr
         final_patch[int(SHAPE_SIZE/2):SHAPE_SIZE, int(SHAPE_SIZE/2):SHAPE_SIZE] = patch_rr
 
-        print("patch_lf", patch_lf)
-
-        final_patch = np.reshape(final_patch,(1,100))
+        final_patch = np.reshape(final_patch,(1,SHAPE_SIZE * SHAPE_SIZE))
         
         imu_sig_numpy = np.array(imu_data[imu_idx:imu_idx+frequency_for_every_quatsec_cost_imu])
         freqs, psd = signal.welch(x=imu_sig_numpy, fs=400.0)
 
-        # plt.semilogy(freqs, psd)
-        # plt.xlabel('frequency [Hz]')
-        # plt.ylabel('PSD')
-        # plt.show()
-
         traversability = 0
         traversability_class = np.zeros(shape=(3,))
+
         # Traversability regression
         for freq_idx in range(len(freqs)):
             if 0 <= freqs[freq_idx] <= 30:
@@ -153,9 +134,9 @@ def main():
 
 def raw_data_parser(args):
 
-    from algo.coreset import DatasetBuffer
+    from algo.DatasetBuffer import DatasetBuffer
 
-    coreset = DatasetBuffer(100000, args.c_r_class_num)
+    coreset = DatasetBuffer(100000, args.coreset_type, args.c_r_class_num)
     f_c_n_s = np.loadtxt(os.path.join(args.dataset_dir, "data_c_n_s.csv"))
     f_c_n_r = np.loadtxt(os.path.join(args.dataset_dir, "data_c_n_r.csv"))
     f_c_n_b = np.loadtxt(os.path.join(args.dataset_dir, "data_c_n_b.csv"))

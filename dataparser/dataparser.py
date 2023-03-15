@@ -12,14 +12,17 @@ import math
 import csv
 import os
 
-
-bag = rosbag.Bag('/media/hsyoon94/HS_SDD/bagfiles/230201/visky_2023-02-01-15-34-49.bag')
+bag = rosbag.Bag('/home/hsyoon94/bagfiles/bag_for_eval_2023-03-15-18-47-16.bag')
 
 odom_topic = '/aft_mapped_to_init'
-costmap_topic = '/traversability_costmap'
+costmap_topic_roughness = '/traversability_costmap_roughness'
+costmap_topic_slippage = '/traversability_costmap_slippage'
+costmap_topic_slope = '/traversability_costmap_slope'
 imu_topic = '/imu/data'
 
-costmap_data = list()
+costmap_data_roughness = list()
+costmap_data_slippage = list()
+costmap_data_slope = list()
 odom_data = list()
 imu_data = list()
 SHAPE_SIZE = 10
@@ -34,9 +37,15 @@ def main():
 
     occupancy_grid = np.array([])
     
-    for topic, msg, t in bag.read_messages(topics=[costmap_topic, odom_topic, imu_topic]):
-        if topic == costmap_topic:
-            costmap_data.append(msg.data)
+    for topic, msg, t in bag.read_messages(topics=[costmap_topic_roughness, costmap_topic_slippage, costmap_topic_slope, odom_topic, imu_topic]):
+        if topic == costmap_topic_roughness:
+            costmap_data_roughness.append(msg.data)
+
+        elif topic == costmap_topic_slippage:
+            costmap_data_slippage.append(msg.data)
+
+        elif topic == costmap_topic_slope:
+            costmap_data_slope.append(msg.data)
 
         elif topic == odom_topic:
             odom_data.append(msg)
@@ -44,34 +53,43 @@ def main():
         elif topic == imu_topic:
             imu_data.append(msg.orientation.z)
 
-    len_costmap = len(costmap_data)
+    
     len_imu = len(imu_data)
     len_odom = len(odom_data)
 
     timestep = 0
     RECORDING_START = True
-    frequency_for_every_quatsec_cost_map = 1
-    frequency_for_every_quatsec_cost_odom = 3
+    frequency_for_every_quatsec_cost_map = 2.5
+    frequency_for_every_quatsec_cost_odom = 2.5
     frequency_for_every_quatsec_cost_imu = 100
     
     for timestep_for_quatsec in range(int(len_imu/400)):
-        costmap_idx = timestep_for_quatsec * frequency_for_every_quatsec_cost_map # 0, 1, 2, ...
-        odom_cur_idx = timestep_for_quatsec * frequency_for_every_quatsec_cost_odom # 0, 3, 6, 9, ...
-        odom_fut_idx = (timestep_for_quatsec + 1) * frequency_for_every_quatsec_cost_odom # 0, 3, 6, 9, ...
+        costmap_idx = int(timestep_for_quatsec * frequency_for_every_quatsec_cost_map) # 0, 1, 2, ...
+        odom_cur_idx = int(timestep_for_quatsec * frequency_for_every_quatsec_cost_odom) # 0, 3, 6, 9, ...
+        odom_fut_idx = int((timestep_for_quatsec + 1) * frequency_for_every_quatsec_cost_odom) # 0, 3, 6, 9, ...
         imu_idx = timestep_for_quatsec * frequency_for_every_quatsec_cost_imu # 0, 100, 200, 300, ...
         
-        costmap_data_element = costmap_data[costmap_idx]
-        input_1d_array_len = len(costmap_data_element)
+        costmap_data_roughness_element = costmap_data_roughness[costmap_idx]
+        costmap_data_slippage_element = costmap_data_slippage[costmap_idx]
+        costmap_data_slope_element = costmap_data_slope[costmap_idx]
+
+        input_1d_array_len = len(costmap_data_roughness_element)
         
         full_output_2d_array_size = int(math.sqrt(input_1d_array_len))
+
         MAP_GRID_LENGTH = 20 / full_output_2d_array_size
         
-        output_2d_array = np.zeros((full_output_2d_array_size, full_output_2d_array_size))
+        output_2d_array_roughness = np.zeros((full_output_2d_array_size, full_output_2d_array_size))
+        output_2d_array_slippage = np.zeros((full_output_2d_array_size, full_output_2d_array_size))
+        output_2d_array_slope = np.zeros((full_output_2d_array_size, full_output_2d_array_size))
 
         for row_idx in range(full_output_2d_array_size):
             for col_idx in range(full_output_2d_array_size):
-                output_2d_array[row_idx][col_idx] = costmap_data_element[row_idx*full_output_2d_array_size + col_idx]
+                output_2d_array_roughness[row_idx][col_idx] = costmap_data_roughness_element[row_idx*full_output_2d_array_size + col_idx]
+                output_2d_array_slippage[row_idx][col_idx] = costmap_data_slippage_element[row_idx*full_output_2d_array_size + col_idx]
+                output_2d_array_slope[row_idx][col_idx] = costmap_data_slope_element[row_idx*full_output_2d_array_size + col_idx]
         
+        # Coordinate
         wheel_lf_x = int(full_output_2d_array_size/2 - (odom_data[odom_fut_idx].pose.pose.position.y-odom_data[odom_cur_idx].pose.pose.position.y)/MAP_GRID_LENGTH - 1*math.sin(odom_data[odom_fut_idx].pose.pose.orientation.x) - 2*math.cos(odom_data[odom_fut_idx].pose.pose.orientation.x))
         wheel_lf_y = int(full_output_2d_array_size/2 + (odom_data[odom_fut_idx].pose.pose.position.x-odom_data[odom_cur_idx].pose.pose.position.x)/MAP_GRID_LENGTH - 1*math.cos(odom_data[odom_fut_idx].pose.pose.orientation.x) + 2*math.sin(odom_data[odom_fut_idx].pose.pose.orientation.x))
 
@@ -84,19 +102,47 @@ def main():
         wheel_rr_x = int(full_output_2d_array_size/2 - (odom_data[odom_fut_idx].pose.pose.position.y-odom_data[odom_cur_idx].pose.pose.position.y)/MAP_GRID_LENGTH + 1*math.sin(odom_data[odom_fut_idx].pose.pose.orientation.x) + 2*math.cos(odom_data[odom_fut_idx].pose.pose.orientation.x))
         wheel_rr_y = int(full_output_2d_array_size/2 + (odom_data[odom_fut_idx].pose.pose.position.x-odom_data[odom_cur_idx].pose.pose.position.x)/MAP_GRID_LENGTH + 1*math.cos(odom_data[odom_fut_idx].pose.pose.orientation.x) - 2*math.sin(odom_data[odom_fut_idx].pose.pose.orientation.x))
 
-        patch_lf = output_2d_array[wheel_lf_x-int(SHAPE_SIZE / (2 * 2)):wheel_lf_x+int(SHAPE_SIZE / (2 * 2)) + 1, wheel_lf_y-int(SHAPE_SIZE / (2 * 2)):wheel_lf_y+int(SHAPE_SIZE / (2 * 2)) + 1]
-        patch_rf = output_2d_array[wheel_rf_x-int(SHAPE_SIZE / (2 * 2)):wheel_rf_x+int(SHAPE_SIZE / (2 * 2)) + 1, wheel_rf_y-int(SHAPE_SIZE / (2 * 2)):wheel_rf_y+int(SHAPE_SIZE / (2 * 2)) + 1]
+        # Roughness
+        patch_lf_roughness = output_2d_array_roughness[wheel_lf_x-int(SHAPE_SIZE / (2 * 2)):wheel_lf_x+int(SHAPE_SIZE / (2 * 2)) + 1, wheel_lf_y-int(SHAPE_SIZE / (2 * 2)):wheel_lf_y+int(SHAPE_SIZE / (2 * 2)) + 1]
+        patch_rf_roughness = output_2d_array_roughness[wheel_rf_x-int(SHAPE_SIZE / (2 * 2)):wheel_rf_x+int(SHAPE_SIZE / (2 * 2)) + 1, wheel_rf_y-int(SHAPE_SIZE / (2 * 2)):wheel_rf_y+int(SHAPE_SIZE / (2 * 2)) + 1]
+        patch_lr_roughness = output_2d_array_roughness[wheel_lr_x-int(SHAPE_SIZE / (2 * 2)):wheel_lr_x+int(SHAPE_SIZE / (2 * 2)) + 1, wheel_lr_y-int(SHAPE_SIZE / (2 * 2)):wheel_lr_y+int(SHAPE_SIZE / (2 * 2)) + 1]
+        patch_rr_roughness = output_2d_array_roughness[wheel_rr_x-int(SHAPE_SIZE / (2 * 2)):wheel_rr_x+int(SHAPE_SIZE / (2 * 2)) + 1, wheel_rr_y-int(SHAPE_SIZE / (2 * 2)):wheel_rr_y+int(SHAPE_SIZE / (2 * 2)) + 1]
 
-        patch_lr = output_2d_array[wheel_lr_x-int(SHAPE_SIZE / (2 * 2)):wheel_lr_x+int(SHAPE_SIZE / (2 * 2)) + 1, wheel_lr_y-int(SHAPE_SIZE / (2 * 2)):wheel_lr_y+int(SHAPE_SIZE / (2 * 2)) + 1]
-        patch_rr = output_2d_array[wheel_rr_x-int(SHAPE_SIZE / (2 * 2)):wheel_rr_x+int(SHAPE_SIZE / (2 * 2)) + 1, wheel_rr_y-int(SHAPE_SIZE / (2 * 2)):wheel_rr_y+int(SHAPE_SIZE / (2 * 2)) + 1]
+        final_patch_roughness =np.zeros((SHAPE_SIZE, SHAPE_SIZE))
+        final_patch_roughness[0:int(SHAPE_SIZE/2), 0:int(SHAPE_SIZE/2)] = patch_lf_roughness
+        final_patch_roughness[int(SHAPE_SIZE/2):SHAPE_SIZE, 0:int(SHAPE_SIZE/2)] = patch_rf_roughness
+        final_patch_roughness[0:int(SHAPE_SIZE/2), int(SHAPE_SIZE/2):SHAPE_SIZE] = patch_lr_roughness
+        final_patch_roughness[int(SHAPE_SIZE/2):SHAPE_SIZE, int(SHAPE_SIZE/2):SHAPE_SIZE] = patch_rr_roughness
+        final_patch_roughness = np.reshape(final_patch_roughness,(1,SHAPE_SIZE * SHAPE_SIZE))
 
-        final_patch=np.zeros((SHAPE_SIZE, SHAPE_SIZE))
-        final_patch[0:int(SHAPE_SIZE/2), 0:int(SHAPE_SIZE/2)] = patch_lf
-        final_patch[int(SHAPE_SIZE/2):SHAPE_SIZE, 0:int(SHAPE_SIZE/2)] = patch_rf
-        final_patch[0:int(SHAPE_SIZE/2), int(SHAPE_SIZE/2):SHAPE_SIZE] = patch_lr
-        final_patch[int(SHAPE_SIZE/2):SHAPE_SIZE, int(SHAPE_SIZE/2):SHAPE_SIZE] = patch_rr
+        # Slope
+        patch_lf_slope = output_2d_array_slope[wheel_lf_x-int(SHAPE_SIZE / (2 * 2)):wheel_lf_x+int(SHAPE_SIZE / (2 * 2)) + 1, wheel_lf_y-int(SHAPE_SIZE / (2 * 2)):wheel_lf_y+int(SHAPE_SIZE / (2 * 2)) + 1]
+        patch_rf_slope = output_2d_array_slope[wheel_rf_x-int(SHAPE_SIZE / (2 * 2)):wheel_rf_x+int(SHAPE_SIZE / (2 * 2)) + 1, wheel_rf_y-int(SHAPE_SIZE / (2 * 2)):wheel_rf_y+int(SHAPE_SIZE / (2 * 2)) + 1]
+        patch_lr_slope = output_2d_array_slope[wheel_lr_x-int(SHAPE_SIZE / (2 * 2)):wheel_lr_x+int(SHAPE_SIZE / (2 * 2)) + 1, wheel_lr_y-int(SHAPE_SIZE / (2 * 2)):wheel_lr_y+int(SHAPE_SIZE / (2 * 2)) + 1]
+        patch_rr_slope = output_2d_array_slope[wheel_rr_x-int(SHAPE_SIZE / (2 * 2)):wheel_rr_x+int(SHAPE_SIZE / (2 * 2)) + 1, wheel_rr_y-int(SHAPE_SIZE / (2 * 2)):wheel_rr_y+int(SHAPE_SIZE / (2 * 2)) + 1]
 
-        final_patch = np.reshape(final_patch,(1,SHAPE_SIZE * SHAPE_SIZE))
+        final_patch_slope =np.zeros((SHAPE_SIZE, SHAPE_SIZE))
+        final_patch_slope[0:int(SHAPE_SIZE/2), 0:int(SHAPE_SIZE/2)] = patch_lf_slope
+        final_patch_slope[int(SHAPE_SIZE/2):SHAPE_SIZE, 0:int(SHAPE_SIZE/2)] = patch_rf_slope
+        final_patch_slope[0:int(SHAPE_SIZE/2), int(SHAPE_SIZE/2):SHAPE_SIZE] = patch_lr_slope
+        final_patch_slope[int(SHAPE_SIZE/2):SHAPE_SIZE, int(SHAPE_SIZE/2):SHAPE_SIZE] = patch_rr_slope
+        final_patch_slope = np.reshape(final_patch_slope,(1,SHAPE_SIZE * SHAPE_SIZE))
+
+
+        # Slippage
+
+        patch_lf_slippage = output_2d_array_slippage[wheel_lf_x-int(SHAPE_SIZE / (2 * 2)):wheel_lf_x+int(SHAPE_SIZE / (2 * 2)) + 1, wheel_lf_y-int(SHAPE_SIZE / (2 * 2)):wheel_lf_y+int(SHAPE_SIZE / (2 * 2)) + 1]
+        patch_rf_slippage = output_2d_array_slippage[wheel_rf_x-int(SHAPE_SIZE / (2 * 2)):wheel_rf_x+int(SHAPE_SIZE / (2 * 2)) + 1, wheel_rf_y-int(SHAPE_SIZE / (2 * 2)):wheel_rf_y+int(SHAPE_SIZE / (2 * 2)) + 1]
+        patch_lr_slippage = output_2d_array_slippage[wheel_lr_x-int(SHAPE_SIZE / (2 * 2)):wheel_lr_x+int(SHAPE_SIZE / (2 * 2)) + 1, wheel_lr_y-int(SHAPE_SIZE / (2 * 2)):wheel_lr_y+int(SHAPE_SIZE / (2 * 2)) + 1]
+        patch_rr_slippage = output_2d_array_slippage[wheel_rr_x-int(SHAPE_SIZE / (2 * 2)):wheel_rr_x+int(SHAPE_SIZE / (2 * 2)) + 1, wheel_rr_y-int(SHAPE_SIZE / (2 * 2)):wheel_rr_y+int(SHAPE_SIZE / (2 * 2)) + 1]
+
+        final_patch_slippage =np.zeros((SHAPE_SIZE, SHAPE_SIZE))
+        final_patch_slippage[0:int(SHAPE_SIZE/2), 0:int(SHAPE_SIZE/2)] = patch_lf_slippage
+        final_patch_slippage[int(SHAPE_SIZE/2):SHAPE_SIZE, 0:int(SHAPE_SIZE/2)] = patch_rf_slippage
+        final_patch_slippage[0:int(SHAPE_SIZE/2), int(SHAPE_SIZE/2):SHAPE_SIZE] = patch_lr_slippage
+        final_patch_slippage[int(SHAPE_SIZE/2):SHAPE_SIZE, int(SHAPE_SIZE/2):SHAPE_SIZE] = patch_rr_slippage
+        final_patch_slippage = np.reshape(final_patch_slippage,(1,SHAPE_SIZE * SHAPE_SIZE))
+
         
         imu_sig_numpy = np.array(imu_data[imu_idx:imu_idx+frequency_for_every_quatsec_cost_imu])
         freqs, psd = signal.welch(x=imu_sig_numpy, fs=400.0)
@@ -109,22 +155,23 @@ def main():
             if 0 <= freqs[freq_idx] <= 30:
                 traversability = traversability + psd[freq_idx]
         
+        scale = 1e7
         # Traversability classification
-        if 0 <= traversability <= 10:
+        if traversability * scale <= 10:
             traversability_class[0] = 1
-        elif 10 < traversability <= 20:
+        elif 10 < traversability * scale <= 20:
             traversability_class[1] = 1
         else:
             traversability_class[2] = 1
 
         with open("data_c_n_r.csv", "ab") as fr:
-            np.savetxt(fr,final_patch)
+            np.savetxt(fr,final_patch_roughness)
 
         with open("data_c_n_b.csv", "ab") as fb:
-            np.savetxt(fb,final_patch)
+            np.savetxt(fb,final_patch_slope)
 
         with open("data_c_n_s.csv", "ab") as fs:
-            np.savetxt(fs,final_patch)
+            np.savetxt(fs,final_patch_slippage)
         
         file_writer.writerow([traversability]) 
         file_writer_c.writerow(traversability_class)

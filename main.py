@@ -42,12 +42,14 @@ def main():
     for cycle_idx in range(args.training_cycle):
         print("Training cycle", cycle_idx, "/", args.training_cycle, "starts")
         
-        dl = DataLoader(coreset, batch_size=2, shuffle=True, sampler=None, num_workers=0, pin_memory=False, drop_last=True)
+        dl = DataLoader(coreset, batch_size=args.training_batch_size, shuffle=True, sampler=None, num_workers=0, pin_memory=False, drop_last=True)
         diter = iter(dl)
 
+        # Train and update NN
         train(args, model, diter, dl, args.iteration, cycle_idx, loss_function, optimizer, writer, device)
         writer.flush()
 
+        # Update coreset
         new_data_ipt = full_rosbag_dataset[full_data_index][0]
         new_data_opt = full_rosbag_dataset[full_data_index][1]
         print("New data comes as input:", new_data_ipt, ", output:", new_data_opt)

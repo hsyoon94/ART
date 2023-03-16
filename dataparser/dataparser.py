@@ -11,8 +11,13 @@ from scipy import signal
 import math
 import csv
 import os
+from PIL import Image
 
-bag = rosbag.Bag('/home/hsyoon94/bagfiles/bag_for_eval_2023-03-15-18-47-16.bag')
+
+# roslaunch visky visky.launch
+# rosbag record -o bag_for_eval /imu/data /aft_mapped_to_init /traversability_costmap_roughness /traversability_costmap_slippage /traversability_costmap_slope
+
+bag = rosbag.Bag('/home/hsyoon94/bagfiles/bag_for_eval_2023-03-16-10-47-33.bag')
 
 odom_topic = '/aft_mapped_to_init'
 costmap_topic_roughness = '/traversability_costmap_roughness'
@@ -30,6 +35,7 @@ MAP_GRID_LENGTH = 0
 
 def main():
     
+    remove_old_files()
     file_write = open('data_c_r.csv', 'w', newline="")
     file_write_c = open('data_c_r_c.csv', 'w', newline="")
     file_writer = csv.writer(file_write)
@@ -53,17 +59,21 @@ def main():
         elif topic == imu_topic:
             imu_data.append(msg.orientation.z)
 
-    
     len_imu = len(imu_data)
+    len_cost = len(costmap_data_slope)
     len_odom = len(odom_data)
+    
+    real_time_duration_second = len_imu / 400
 
     timestep = 0
     RECORDING_START = True
-    frequency_for_every_quatsec_cost_map = 2.5
-    frequency_for_every_quatsec_cost_odom = 2.5
+    frequency_for_every_quatsec_cost_map = (len_cost/real_time_duration_second)/4
+    frequency_for_every_quatsec_cost_odom = (len_odom/real_time_duration_second)/4
     frequency_for_every_quatsec_cost_imu = 100
     
-    for timestep_for_quatsec in range(int(len_imu/400)):
+    LAST_TWO_COUNT = int(len_imu/(400/4))
+
+    for timestep_for_quatsec in range(int(len_imu/(400/4))):
         costmap_idx = int(timestep_for_quatsec * frequency_for_every_quatsec_cost_map) # 0, 1, 2, ...
         odom_cur_idx = int(timestep_for_quatsec * frequency_for_every_quatsec_cost_odom) # 0, 3, 6, 9, ...
         odom_fut_idx = int((timestep_for_quatsec + 1) * frequency_for_every_quatsec_cost_odom) # 0, 3, 6, 9, ...
@@ -128,9 +138,7 @@ def main():
         final_patch_slope[int(SHAPE_SIZE/2):SHAPE_SIZE, int(SHAPE_SIZE/2):SHAPE_SIZE] = patch_rr_slope
         final_patch_slope = np.reshape(final_patch_slope,(1,SHAPE_SIZE * SHAPE_SIZE))
 
-
         # Slippage
-
         patch_lf_slippage = output_2d_array_slippage[wheel_lf_x-int(SHAPE_SIZE / (2 * 2)):wheel_lf_x+int(SHAPE_SIZE / (2 * 2)) + 1, wheel_lf_y-int(SHAPE_SIZE / (2 * 2)):wheel_lf_y+int(SHAPE_SIZE / (2 * 2)) + 1]
         patch_rf_slippage = output_2d_array_slippage[wheel_rf_x-int(SHAPE_SIZE / (2 * 2)):wheel_rf_x+int(SHAPE_SIZE / (2 * 2)) + 1, wheel_rf_y-int(SHAPE_SIZE / (2 * 2)):wheel_rf_y+int(SHAPE_SIZE / (2 * 2)) + 1]
         patch_lr_slippage = output_2d_array_slippage[wheel_lr_x-int(SHAPE_SIZE / (2 * 2)):wheel_lr_x+int(SHAPE_SIZE / (2 * 2)) + 1, wheel_lr_y-int(SHAPE_SIZE / (2 * 2)):wheel_lr_y+int(SHAPE_SIZE / (2 * 2)) + 1]
@@ -143,11 +151,12 @@ def main():
         final_patch_slippage[int(SHAPE_SIZE/2):SHAPE_SIZE, int(SHAPE_SIZE/2):SHAPE_SIZE] = patch_rr_slippage
         final_patch_slippage = np.reshape(final_patch_slippage,(1,SHAPE_SIZE * SHAPE_SIZE))
 
-        
+        # Robot-side Traversability
         imu_sig_numpy = np.array(imu_data[imu_idx:imu_idx+frequency_for_every_quatsec_cost_imu])
         freqs, psd = signal.welch(x=imu_sig_numpy, fs=400.0)
 
         traversability = 0
+        scale = 1e7
         traversability_class = np.zeros(shape=(3,))
 
         # Traversability regression
@@ -155,7 +164,6 @@ def main():
             if 0 <= freqs[freq_idx] <= 30:
                 traversability = traversability + psd[freq_idx]
         
-        scale = 1e7
         # Traversability classification
         if traversability * scale <= 10:
             traversability_class[0] = 1
@@ -173,17 +181,66 @@ def main():
         with open("data_c_n_s.csv", "ab") as fs:
             np.savetxt(fs,final_patch_slippage)
         
+        if (LAST_TWO_COUNT - timestep_for_quatsec) == 2 or (LAST_TWO_COUNT - timestep_for_quatsec) == 1:
+            with open("inference/data_c_n_r_inference.csv", "ab") as frinf:
+                np.savetxt(frinf,np.reshape(output_2d_array_roughness, (1, input_1d_array_len)))
+                output_2d_array_roughness = output_2d_array_roughness.astype(np.uint8)
+                im = Image.fromarray(output_2d_array_roughness)
+                if (LAST_TWO_COUNT - timestep_for_quatsec) == 2:
+                    im.save("inference/image_roughness_0.jpg")
+                elif (LAST_TWO_COUNT - timestep_for_quatsec) == 1:
+                    im.save("inference/image_roughness_1.jpg")
+
+            with open("inference/data_c_n_b_inference.csv", "ab") as fbinf:
+                np.savetxt(fbinf,np.reshape(output_2d_array_slope, (1, input_1d_array_len)))
+                output_2d_array_slope = output_2d_array_slope.astype(np.uint8)
+                im = Image.fromarray(output_2d_array_slope)
+                if (LAST_TWO_COUNT - timestep_for_quatsec) == 2:
+                    im.save("inference/image_slope_0.jpg")
+                elif (LAST_TWO_COUNT - timestep_for_quatsec) == 1:
+                    im.save("inference/image_slope_1.jpg")
+
+            with open("inference/data_c_n_s_inference.csv", "ab") as fsinf:
+                np.savetxt(fsinf,np.reshape(output_2d_array_slippage, (1, input_1d_array_len)))
+                output_2d_array_slippage = output_2d_array_slippage.astype(np.uint8)
+                im = Image.fromarray(output_2d_array_slippage)
+                if (LAST_TWO_COUNT - timestep_for_quatsec) == 2:
+                    im.save("inference/image_slippage_0.jpg")
+                elif (LAST_TWO_COUNT - timestep_for_quatsec) == 1:
+                    im.save("inference/image_slippage_1.jpg")
+            
         file_writer.writerow([traversability]) 
         file_writer_c.writerow(traversability_class)
         
         timestep = timestep + 1
     print("Data length:", timestep)
 
+def remove_old_files():
+
+    if os.path.exists('data_c_r.csv'):
+        os.remove('data_c_r.csv')
+    if os.path.exists('data_c_r_c.csv'):
+        os.remove('data_c_r_c.csv')
+
+    if os.path.exists('data_c_n_b.csv'):
+        os.remove('data_c_n_b.csv')
+    if os.path.exists('data_c_n_s.csv'):
+        os.remove('data_c_n_s.csv')
+    if os.path.exists('data_c_n_r.csv'):
+        os.remove('data_c_n_r.csv')
+
+    if os.path.exists('inference/data_c_n_b_inference.csv'):
+        os.remove('inference/data_c_n_b_inference.csv')
+    if os.path.exists('inference/data_c_n_s_inference.csv'):
+        os.remove('inference/data_c_n_s_inference.csv')
+    if os.path.exists('inference/data_c_n_r_inference.csv'):
+        os.remove('inference/data_c_n_r_inference.csv')
+
 def raw_data_parser(args):
 
     from algo.DatasetBuffer import DatasetBuffer
 
-    coreset = DatasetBuffer(100000, args.coreset_type, args.c_r_class_num)
+    coreset = DatasetBuffer(100000, args.coreset_type, args.c_r_class_num, "train")
     f_c_n_s = np.loadtxt(os.path.join(args.dataset_dir, "data_c_n_s.csv"))
     f_c_n_r = np.loadtxt(os.path.join(args.dataset_dir, "data_c_n_r.csv"))
     f_c_n_b = np.loadtxt(os.path.join(args.dataset_dir, "data_c_n_b.csv"))
@@ -221,6 +278,34 @@ def raw_data_parser(args):
         new_opt = tmp_opt
     
     return coreset
+
+def inference_data_parser(args):
+
+    from algo.DatasetBuffer import DatasetBuffer
+
+    inference_dataset = DatasetBuffer(1000, args.coreset_type, args.c_r_class_num, "inference")
+    f_c_n_s = np.loadtxt(os.path.join(args.dataset_dir, "inference", "data_c_n_s_inference.csv"))
+    f_c_n_r = np.loadtxt(os.path.join(args.dataset_dir, "inference", "data_c_n_r_inference.csv"))
+    f_c_n_b = np.loadtxt(os.path.join(args.dataset_dir, "inference", "data_c_n_b_inference.csv"))
+
+    count = 0
+    new_ipt = None
+    new_opt = None
+
+    for count in range(2):
+        tmp_ipt_s = f_c_n_s[count]
+        tmp_ipt_r = f_c_n_r[count]
+        tmp_ipt_b = f_c_n_b[count]
+        
+        tmp_ipt_s = np.reshape(tmp_ipt_s, (400, 400))
+        tmp_ipt_r = np.reshape(tmp_ipt_r, (400, 400))
+        tmp_ipt_b = np.reshape(tmp_ipt_b, (400, 400))
+        
+        tmp_ipt = np.array([tmp_ipt_s, tmp_ipt_r, tmp_ipt_b])
+        
+        inference_dataset.append(tmp_ipt, None)
+    
+    return inference_dataset
 
 if __name__ == '__main__':
     main()

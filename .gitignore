@@ -1,4 +1,10 @@
 *.csv
+*.jpg
+*.png
+*.jpeg
 runs/
 trained_models/
 __pycache__
+wandb/
+inferenced_result/
+video.avi

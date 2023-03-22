@@ -271,7 +271,7 @@ def raw_data_parser(args):
             tmp_opt = [float(item) for item in line]
             tmp_opt = np.array(tmp_opt)
         
-        coreset.append(tmp_ipt, tmp_opt)
+        coreset.sequantial_append(tmp_ipt, tmp_opt)
         count = count + 1
 
         new_ipt = tmp_ipt

@@ -279,6 +279,49 @@ def raw_data_parser(args):
     
     return coreset
 
+def eval_data_parser(args):
+
+    from algo.DatasetBuffer import DatasetBuffer
+    coreset = DatasetBuffer(100000, args.coreset_type, args.c_r_class_num, "train")
+    f_c_n_s = np.loadtxt(os.path.join(args.dataset_dir, "data_c_n_s_eval.csv"))
+    f_c_n_r = np.loadtxt(os.path.join(args.dataset_dir, "data_c_n_r_eval.csv"))
+    f_c_n_b = np.loadtxt(os.path.join(args.dataset_dir, "data_c_n_b_eval.csv"))
+
+    if args.c_r_class_num == 1:
+        f_c_r = open(os.path.join(args.dataset_dir, "data_c_r_eval.csv"))
+    elif args.c_r_class_num == 3:
+        f_c_r = open(os.path.join(args.dataset_dir, "data_c_r_c_eval.csv"))
+
+    rdr = csv.reader(f_c_r)
+    count = 0
+    new_ipt = None
+    new_opt = None
+
+    for line in rdr:
+        tmp_ipt_s = f_c_n_s[count]
+        tmp_ipt_r = f_c_n_r[count]
+        tmp_ipt_b = f_c_n_b[count]
+        
+        tmp_ipt_s = np.reshape(tmp_ipt_s, (args.c_n_grid_size, args.c_n_grid_size))
+        tmp_ipt_r = np.reshape(tmp_ipt_r, (args.c_n_grid_size, args.c_n_grid_size))
+        tmp_ipt_b = np.reshape(tmp_ipt_b, (args.c_n_grid_size, args.c_n_grid_size))
+        
+        tmp_ipt = np.array([tmp_ipt_s, tmp_ipt_r, tmp_ipt_b])
+        if args.c_r_class_num == 1:
+            tmp_opt = float(line[0])
+        else:
+            tmp_opt = [float(item) for item in line]
+            tmp_opt = np.array(tmp_opt)
+        
+        coreset.sequantial_append(tmp_ipt, tmp_opt)
+        count = count + 1
+
+        new_ipt = tmp_ipt
+        new_opt = tmp_opt
+    
+    return coreset
+
+
 def inference_data_parser(args):
 
     from algo.DatasetBuffer import DatasetBuffer

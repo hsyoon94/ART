@@ -12,7 +12,7 @@ import math
 import csv
 import os
 from PIL import Image
-
+import random
 
 # roslaunch visky visky.launch
 # rosbag record -o bag_for_eval /imu/data /aft_mapped_to_init /traversability_costmap_roughness /traversability_costmap_slippage /traversability_costmap_slope
@@ -32,14 +32,26 @@ odom_data = list()
 imu_data = list()
 SHAPE_SIZE = 10
 MAP_GRID_LENGTH = 0
+CLASS_NUM = 10
 
 def main():
     
     remove_old_files()
     file_write = open('data_c_r.csv', 'w', newline="")
     file_write_c = open('data_c_r_c.csv', 'w', newline="")
+
+    file_write_eval = open('data_c_r_eval.csv', 'w', newline="")
+    file_write_c_eval = open('data_c_r_c_eval.csv', 'w', newline="")
+
     file_writer = csv.writer(file_write)
     file_writer_c = csv.writer(file_write_c)
+
+    file_writer_eval = csv.writer(file_write_eval)
+    file_writer_c_eval = csv.writer(file_write_c_eval)
+
+
+    trav_min = 11111
+    trav_max = 0
 
     occupancy_grid = np.array([])
     
@@ -72,6 +84,7 @@ def main():
     frequency_for_every_quatsec_cost_imu = 100
     
     LAST_TWO_COUNT = int(len_imu/(400/4))
+    traversability_class_count = np.zeros(shape=(CLASS_NUM,))
 
     for timestep_for_quatsec in range(int(len_imu/(400/4))):
         costmap_idx = int(timestep_for_quatsec * frequency_for_every_quatsec_cost_map) # 0, 1, 2, ...
@@ -156,31 +169,56 @@ def main():
         freqs, psd = signal.welch(x=imu_sig_numpy, fs=400.0)
 
         traversability = 0
-        scale = 1e7
-        traversability_class = np.zeros(shape=(3,))
+        
+        scale = 1e8
 
         # Traversability regression
         for freq_idx in range(len(freqs)):
             if 0 <= freqs[freq_idx] <= 30:
                 traversability = traversability + psd[freq_idx]
-        
+        traversability = traversability * scale
+
+        trav_min = min(traversability, trav_min)
+        trav_max = max(traversability, trav_max)
+
+        print("trav min", trav_min, "trav_max", trav_max)
+
         # Traversability classification
-        if traversability * scale <= 10:
-            traversability_class[0] = 1
-        elif 10 < traversability * scale <= 20:
-            traversability_class[1] = 1
-        else:
-            traversability_class[2] = 1
-
-        with open("data_c_n_r.csv", "ab") as fr:
-            np.savetxt(fr,final_patch_roughness)
-
-        with open("data_c_n_b.csv", "ab") as fb:
-            np.savetxt(fb,final_patch_slope)
-
-        with open("data_c_n_s.csv", "ab") as fs:
-            np.savetxt(fs,final_patch_slippage)
+        trav_list_idx = traversability / 5
+        trav_list_idx = min(trav_list_idx, 9)
         
+        traversability_class = np.zeros(shape=(CLASS_NUM,))
+        traversability_class[int(trav_list_idx)] = 1
+        traversability_class_count[int(trav_list_idx)] = traversability_class_count[int(trav_list_idx)] + 1
+        
+        random_probability = random.uniform(0, 1)
+        # For evaluation set
+        if 0 <= random_probability <= 0.1:
+            with open("data_c_n_r_eval.csv", "ab") as fr:
+                np.savetxt(fr,final_patch_roughness)
+
+            with open("data_c_n_b_eval.csv", "ab") as fb:
+                np.savetxt(fb,final_patch_slope)
+
+            with open("data_c_n_s_eval.csv", "ab") as fs:
+                np.savetxt(fs,final_patch_slippage)
+            
+            file_writer_eval.writerow([traversability])
+            file_writer_c_eval.writerow(traversability_class)
+        
+        else:
+            with open("data_c_n_r.csv", "ab") as fr:
+                np.savetxt(fr,final_patch_roughness)
+
+            with open("data_c_n_b.csv", "ab") as fb:
+                np.savetxt(fb,final_patch_slope)
+
+            with open("data_c_n_s.csv", "ab") as fs:
+                np.savetxt(fs,final_patch_slippage)
+            
+            file_writer.writerow([traversability])
+            file_writer_c.writerow(traversability_class)
+
         if (LAST_TWO_COUNT - timestep_for_quatsec) == 2 or (LAST_TWO_COUNT - timestep_for_quatsec) == 1:
             with open("inference/data_c_n_r_inference.csv", "ab") as frinf:
                 np.savetxt(frinf,np.reshape(output_2d_array_roughness, (1, input_1d_array_len)))
@@ -208,12 +246,11 @@ def main():
                     im.save("inference/image_slippage_0.jpg")
                 elif (LAST_TWO_COUNT - timestep_for_quatsec) == 1:
                     im.save("inference/image_slippage_1.jpg")
-            
-        file_writer.writerow([traversability]) 
-        file_writer_c.writerow(traversability_class)
         
         timestep = timestep + 1
+
     print("Data length:", timestep)
+    print("Data distribution", traversability_class_count)
 
 def remove_old_files():
 
@@ -289,7 +326,7 @@ def eval_data_parser(args):
 
     if args.c_r_class_num == 1:
         f_c_r = open(os.path.join(args.dataset_dir, "data_c_r_eval.csv"))
-    elif args.c_r_class_num == 3:
+    else:
         f_c_r = open(os.path.join(args.dataset_dir, "data_c_r_c_eval.csv"))
 
     rdr = csv.reader(f_c_r)
@@ -346,7 +383,7 @@ def inference_data_parser(args):
         
         tmp_ipt = np.array([tmp_ipt_s, tmp_ipt_r, tmp_ipt_b])
         
-        inference_dataset.append(tmp_ipt, None)
+        inference_dataset.append(tmp_ipt, None, None, 0)
     
     return inference_dataset
 

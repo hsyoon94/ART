@@ -2,12 +2,13 @@ import torch
 import torch.nn as nn
 
 class ART(nn.Module):
-    def __init__(self, input_dim, input_channel_num, output_dim, dropout_rate, device):
+    def __init__(self, input_dim, input_channel_num, output_dim, dropout_rate, training_batch_size, device):
         super(ART, self).__init__()
         self.input_dim = input_dim
         self.input_channel_num = input_channel_num
         self.output_dim = output_dim
-        
+        self.training_batch_size = training_batch_size
+
         self.device = device
         self.cnn_mid_channel = 8
         
@@ -19,8 +20,9 @@ class ART(nn.Module):
         self.CNN = nn.Conv2d(self.input_channel_num, self.cnn_mid_channel, 3, stride=1).to(self.device)
         self.MaxPool = nn.MaxPool2d(3, 1).to(self.device)
         
-        self.batchnorm = nn.BatchNorm2d(input_channel_num).to(self.device)
+        self.batchnorm = nn.BatchNorm2d(self.training_batch_size).to(self.device)
 
+        # 288 -> 960
         # For regression task NN
         if self.output_dim == 1:
             self.F1 = nn.Linear(288, self.output_dim).to(self.device)
@@ -30,19 +32,21 @@ class ART(nn.Module):
         
     def forward(self, input):
         output = 0
-        output = self.batchnorm(input)
         if self.output_dim == 1:
-            output = self.CNN(output)
+            output = self.CNN(input)
             output = self.MaxPool(output)
             output = torch.flatten(output, start_dim=1)
             output = self.F1(output)
-        elif self.output_dim == 3:
-            output = self.CNN(output)
+        elif self.output_dim != 1:
+            output = self.CNN(input)
+            output = self.batchnorm(output)
+            output = self.ReLU(output)
             output = self.MaxPool(output)
             output = torch.flatten(output, start_dim=1)
             output = self.F1(output)
             output = self.ReLU(output)
             output = self.dropout(output)
             output = self.F2(output)
+
         
         return output

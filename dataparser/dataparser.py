@@ -4,8 +4,8 @@ sys.path.append('../algo')
 
 
 import numpy as np
-import rosbag
-from std_msgs.msg import Int32, String
+# import rosbag
+# from std_msgs.msg import Int32, String
 from matplotlib import pyplot as plt
 from scipy import signal
 import math
@@ -17,7 +17,7 @@ import random
 # roslaunch visky visky.launch
 # rosbag record -o bag_for_eval /imu/data /aft_mapped_to_init /traversability_costmap_roughness /traversability_costmap_slippage /traversability_costmap_slope
 
-bag = rosbag.Bag('/home/hsyoon94/bagfiles/bag_for_eval_2023-03-16-10-47-33.bag')
+# bag = rosbag.Bag('/home/hsyoon94/bagfiles/bag_for_eval_2023-03-16-10-47-33.bag')
 
 odom_topic = '/aft_mapped_to_init'
 costmap_topic_roughness = '/traversability_costmap_roughness'

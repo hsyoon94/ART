@@ -11,7 +11,7 @@ import numpy as np
 import random
 
 is_cuda = torch.cuda.is_available()
-device = torch.device('cuda' if is_cuda else 'cpu')
+device = torch.device('cuda:2' if is_cuda else 'cpu')
 
 # Mini batch manager
 class DatasetBuffer(Dataset):

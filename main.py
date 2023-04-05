@@ -6,7 +6,6 @@ from dataparser.dataparser import raw_data_parser, inference_data_parser, eval_d
 from arguments import get_args
 from torch.utils.data import DataLoader
 from torchsampler import ImbalancedDatasetSampler
-from torch.utils.tensorboard import SummaryWriter
 from PIL import Image
 import os
 from custom_utils import get_date, get_time
@@ -18,7 +17,7 @@ import csv
 import wandb
 
 is_cuda = torch.cuda.is_available()
-device = torch.device('cuda' if is_cuda else 'cpu')
+device = torch.device('cuda:2' if is_cuda else 'cpu')
 
 now_date = get_date()
 now_time = get_time()
@@ -51,7 +50,6 @@ def main():
     optimizer = optim.Adam(model.parameters(), args.lr)
     scheduler = optim.lr_scheduler.LambdaLR(optimizer=optimizer, lr_lambda=lambda epoch: 0.999999999999 ** epoch, last_epoch=-1, verbose=False)
 
-    writer = SummaryWriter(log_dir='./runs/' + str(now_date[2:]) + "_" + str(now_time) + "_cr" + str(args.c_r_class_num) + "_cycle" + str(args.training_cycle) + "_coresize" + str(args.coreset_buffer_size))
 
     # Get full rosbag dataset for offline operation
     full_rosbag_dataset = raw_data_parser(args)
@@ -100,8 +98,7 @@ def main():
         #         count_append = count_append + 1
 
         # Train and update NN
-        train(args, model, coreset, new_data_ipt_tensor, new_data_opt_tensor, args.iteration, cycle_idx, loss_function, optimizer, scheduler, writer, device)
-        writer.flush()
+        train(args, model, coreset, new_data_ipt_tensor, new_data_opt_tensor, args.iteration, cycle_idx, loss_function, optimizer, scheduler, device)
         
         if new_data_ipt_tensor is not None:
             coreset.append(new_data_ipt, new_data_opt, model, args.network_ensemble_cycle)
@@ -119,7 +116,7 @@ def main():
         full_data_index = full_data_index + 1
         
         torch.save(model, os.path.join(args.model_save_dir, "model.pt"))
-        eval_acc = evaluation(args, cycle_idx, model, eval_dataset_coreset, loss_function, writer, device)
+        eval_acc = evaluation(args, cycle_idx, model, eval_dataset_coreset, loss_function, device)
         evaluation_accuracy_history.append(eval_acc)
         print("===============================================================================================================\n\n")
         # inference(args, cycle_idx, model, inference_dataset)
@@ -139,7 +136,7 @@ def main():
         
 
 
-def train(args, model, coreset, new_data_ipt_tensor, new_data_opt_tensor, iteration, cycle, criteria, optimizer, scheduler, writer, device):
+def train(args, model, coreset, new_data_ipt_tensor, new_data_opt_tensor, iteration, cycle, criteria, optimizer, scheduler, device):
     
     if args.c_r_class_num != 1:
         if new_data_ipt_tensor is not None:
@@ -221,14 +218,12 @@ def train(args, model, coreset, new_data_ipt_tensor, new_data_opt_tensor, iterat
             "train_loss": loss.item(),
             "Uncertainty": uncertainty
         })
-        writer.add_scalar("train_loss", loss.item(), cycle*args.iteration+iter_tmp)
-        writer.add_scalar("Uncertainty", uncertainty)
         
         # if iter_tmp % (args.iteration/5) == 0:
         #     print(str(now_date[2:]) + "_" + str(now_time), ") Training loss:", loss.item(), "Uncertainty:", uncertainty, "LR:", optimizer.param_groups[0]['lr'])
 
 
-def evaluation(args, cycle, model, evaluation_dataset, criteria, writer, device):    
+def evaluation(args, cycle, model, evaluation_dataset, criteria, device):    
     dl = DataLoader(evaluation_dataset, batch_size=len(evaluation_dataset), shuffle=False, sampler=None, num_workers=0, pin_memory=False, drop_last=False)
     diter = iter(dl)
     right = 0
@@ -265,12 +260,9 @@ def evaluation(args, cycle, model, evaluation_dataset, criteria, writer, device)
                 "eval_loss": loss.item(),
                 "eval_accuracy": right / (right+wrong)
             })
-            writer.add_scalar("eval_loss", loss.item(), cycle)
-            writer.add_scalar("eval_accuracy", right / (right+wrong), cycle)
             print("EVAL ACCURACY", right / (right+wrong), "EVAL LOSS", loss.item())
 
         elif args.c_r_class_num == 1:
-            writer.add_scalar("eval_loss", loss.item(), cycle)
             print("EVAL LOSS", loss.item())
     
     return right / (right+wrong)

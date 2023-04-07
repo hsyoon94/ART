@@ -15,7 +15,7 @@ device = torch.device('cuda' if is_cuda else 'cpu')
 
 # Mini batch manager
 class DatasetBuffer(Dataset):
-    def __init__(self, buffer_size, buffer_type, class_num, mode):
+    def __init__(self, buffer_size, buffer_type, class_num, dataset_type, mode):
         self.buffer_size = buffer_size
         self.buffer_type = buffer_type
         self.class_num = class_num
@@ -24,7 +24,7 @@ class DatasetBuffer(Dataset):
         self.c_n = list()
         self.c_r = list()
         self.softmax = nn.Softmax(dim=1)
-
+        self.dataset_type = dataset_type
         
         self.c_n_classwise = list()
         self.c_r_classwise = list()
@@ -50,7 +50,11 @@ class DatasetBuffer(Dataset):
         if self.mode == "train":
             
             if self.class_num != 1:
-                opt_idx = np.argmax(opt)
+                if isinstance(opt, np.ndarray):
+                    opt_idx = int(opt[0])
+                else:
+                    opt_idx = opt
+                
                 if len(self.c_n_classwise[opt_idx]) >= self.buffer_size:
                     if self.buffer_type == 'fifo':
                         self.c_n_classwise[opt_idx].pop()
@@ -78,8 +82,10 @@ class DatasetBuffer(Dataset):
                             self.c_n_classwise[opt_idx].pop(output_std_argmin_idx)
                             self.c_r_classwise[opt_idx].pop(output_std_argmin_idx)
 
-
-                ipt_post = np.array([ipt])
+                if self.dataset_type == 'husky':
+                    ipt_post = np.array([ipt])
+                else:
+                    ipt_post = ipt
                 opt_post = opt
 
                 self.c_n_classwise[opt_idx].append(ipt_post)

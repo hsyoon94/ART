@@ -4,9 +4,10 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 import wandb
 
-def train_benchmark_dataset(args, model, dataloader, criteria, optimizer, scheduler, device):
+def train_benchmark_dataset(args, model, dataset, criteria, optimizer, scheduler, device):
     model.train()
-    diter = iter(dataloader)
+    dl = DataLoader(dataset, batch_size=args.training_batch_size, shuffle=True, sampler=None, num_workers=0, pin_memory=False, drop_last=True)
+    diter = iter(dl)
 
     for iter_tmp in range(args.iteration):
         try:
@@ -15,9 +16,7 @@ def train_benchmark_dataset(args, model, dataloader, criteria, optimizer, schedu
             diter = iter(dl)
             c_n, c_r = next(diter)
         
-        if args.experiment != 'mnist':
-            c_n = torch.squeeze(c_n)
-
+    
         c_n = c_n.type(torch.FloatTensor)
         c_r = c_r.type(torch.LongTensor)
 
@@ -51,8 +50,9 @@ def train_benchmark_dataset(args, model, dataloader, criteria, optimizer, schedu
 
 def train_offline(args, model, dataset, criteria, optimizer, scheduler, device):
     model.train()
-    dl = DataLoader(dataset, batch_size=args.training_batch_size, shuffle=True, sampler=None, num_workers=0, pin_memory=False, drop_last=True)
+    
     # dl = DataLoader(dataset, batch_size=args.training_batch_size, shuffle=False, sampler=ImbalancedDatasetSampler(dataset), num_workers=0, pin_memory=False, drop_last=True)
+    dl = DataLoader(dataset, batch_size=args.training_batch_size, shuffle=True, sampler=None, num_workers=0, pin_memory=False, drop_last=True)
     diter = iter(dl)
 
     for iter_tmp in range(args.iteration):
@@ -62,7 +62,9 @@ def train_offline(args, model, dataset, criteria, optimizer, scheduler, device):
             diter = iter(dl)
             c_n, c_r = next(diter)
 
-        c_n = torch.squeeze(c_n)
+        if args.experiment != 'mnist':
+            c_n = torch.squeeze(c_n)
+        # c_n = torch.squeeze(c_n)
         c_r = torch.squeeze(c_r)
         c_n = c_n.type(torch.FloatTensor)
         c_r = c_r.type(torch.LongTensor)
@@ -103,8 +105,19 @@ def train(args, model, coreset, new_data_ipt_tensor, new_data_opt_tensor, iterat
         dl = DataLoader(coreset, batch_size=args.training_batch_size-1, shuffle=True, sampler=None, num_workers=0, pin_memory=False, drop_last=True)
     elif args.c_r_class_num == 1:
         dl = DataLoader(coreset, batch_size=args.training_batch_size-1, shuffle=True, sampler=None, num_workers=0, pin_memory=False, drop_last=True)
-    
     diter = iter(dl)
+
+    if args.c_r_class_num != 1:
+        if args.experiment == 'husky':
+            if new_data_opt_tensor.size()[0] == 10:
+                new_data_opt_tensor = torch.reshape(new_data_opt_tensor, (1, new_data_opt_tensor.size()[0]))
+        elif args.experiment == 'cifar10':
+            new_data_ipt_tensor = torch.reshape(new_data_ipt_tensor, (1, new_data_ipt_tensor.size()[0], new_data_ipt_tensor.size()[1], new_data_ipt_tensor.size()[2]))
+            new_data_opt_tensor = torch.unsqueeze(new_data_opt_tensor, 0)
+
+    elif args.c_r_class_num == 1:
+        c_r = torch.reshape(c_r, (args.training_batch_size-1,1))
+        new_data_opt_tensor = torch.reshape(new_data_opt_tensor, (1,1))
 
     for iter_tmp in range(args.iteration):
         try:
@@ -115,18 +128,9 @@ def train(args, model, coreset, new_data_ipt_tensor, new_data_opt_tensor, iterat
 
         c_n = torch.squeeze(c_n)
         c_r = torch.squeeze(c_r)
-
-        if new_data_ipt_tensor is not None:
-            if args.c_r_class_num != 1:
-                if new_data_opt_tensor.size()[0] == 10:
-                    new_data_opt_tensor = torch.reshape(new_data_opt_tensor, (1, new_data_opt_tensor.size()[0]))
-
-            elif args.c_r_class_num == 1:
-                c_r = torch.reshape(c_r, (args.training_batch_size-1,1))
-                new_data_opt_tensor = torch.reshape(new_data_opt_tensor, (1,1))
-
-            c_n = torch.cat((c_n, new_data_ipt_tensor), 0)
-            c_r = torch.cat((c_r, new_data_opt_tensor), 0)
+        
+        c_n = torch.cat((c_n, new_data_ipt_tensor), 0)
+        c_r = torch.cat((c_r, new_data_opt_tensor), 0)
 
         c_n = c_n.type(torch.FloatTensor)
         c_r = c_r.type(torch.LongTensor)

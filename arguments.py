@@ -1,10 +1,10 @@
 import argparse
 
-# python main.py --online_learning True --iteration 100 --training_cycle 2000 --lr 0.0001 --dataset_dir './dataparser' --model_save_dir './trained_models' --c_r_class_num 10 --c_n_grid_size 10 --c_n_grid_channel 3 --coreset_buffer_size 200 --training_batch_size 8 --network_ensemble_cycle 5 --dropout_rate 0.25 --regularization_type 'ucl' --reg_lambda 0.1 --coreset_type 'ucm'
-# python main.py --iteration 1000 --training_cycle 2000 --lr 0.0001 --dataset_dir './dataparser' --model_save_dir './trained_models' --c_r_class_num 10 --c_n_grid_size 10 --c_n_grid_channel 3 --coreset_buffer_size 200 --training_batch_size 8 --regularization_type 'l2' --reg_lambda 0.01
+# python main.py --iteration 100 --training_cycle 2000 --lr 0.0001 --dataset_dir './dataparser' --model_save_dir './trained_models' --c_r_class_num 10 --c_n_grid_size 10 --c_n_grid_channel 3 --coreset_buffer_size 200 --training_batch_size 8 --network_ensemble_cycle 5 --dropout_rate 0.25 --regularization_type 'ucl' --reg_lambda 0.1 --coreset_type 'ucm'
+# python main.py --offline_learning True --iteration 1000 --training_cycle 2000 --lr 0.0001 --dataset_dir './dataparser' --model_save_dir './trained_models' --c_r_class_num 10 --c_n_grid_size 10 --c_n_grid_channel 3 --coreset_buffer_size 200 --training_batch_size 8 --regularization_type 'l2' --reg_lambda 0.01
 def get_args():
     parser = argparse.ArgumentParser(description="Arguments of ART")
-    parser.add_argument("--online_learning", default=False, type=bool, help='total training iteration')
+    parser.add_argument("--offline_learning", default=False, type=bool, help='total training iteration')
     parser.add_argument("--iteration", default=1000, type=int, help='total training iteration')
     parser.add_argument("--experiment", default='husky', help='husky tartan cifar10')
     parser.add_argument("--training_cycle", default=10, type=int, help='training_cycle')

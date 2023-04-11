@@ -11,7 +11,7 @@ import numpy as np
 import random
 
 is_cuda = torch.cuda.is_available()
-if torch.cuda.device_count() >= 1:
+if torch.cuda.device_count() > 1:
     device = torch.device('cuda:2' if is_cuda else 'cpu')
 else:
     device = torch.device('cuda:0' if is_cuda else 'cpu')

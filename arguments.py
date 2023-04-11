@@ -1,6 +1,6 @@
 import argparse
 
-# python main.py --iteration 100 --training_cycle 2000 --lr 0.0001 --dataset_dir './dataparser' --model_save_dir './trained_models' --c_r_class_num 10 --c_n_grid_size 10 --c_n_grid_channel 3 --coreset_buffer_size 200 --training_batch_size 8 --network_ensemble_cycle 5 --dropout_rate 0.25 --regularization_type 'ucl' --reg_lambda 0.1 --coreset_type 'ucm' --model 'art'
+# python main.py --iteration 100 --training_cycle 2000 --lr 0.0001 --dataset_dir './dataparser' --model_save_dir './trained_models' --c_r_class_num 5 --c_n_grid_size 10 --c_n_grid_channel 3 --coreset_buffer_size 200 --training_batch_size 8 --network_ensemble_cycle 5 --dropout_rate 0.25 --regularization_type 'ucl' --reg_lambda 0.1 --coreset_type 'ucm' --model 'art' --experiment 'husky'
 # python main.py --offline_learning True --iteration 1000 --training_cycle 2000 --lr 0.0001 --dataset_dir './dataparser' --model_save_dir './trained_models' --c_r_class_num 10 --c_n_grid_size 10 --c_n_grid_channel 3 --coreset_buffer_size 200 --training_batch_size 8 --regularization_type 'l2' --reg_lambda 0.01 --experiment 'cifar10' --model 'art'
 def get_args():
     parser = argparse.ArgumentParser(description="Arguments of ART")

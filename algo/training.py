@@ -70,6 +70,9 @@ def train(args, model, coreset, new_data_ipt_tensor, new_data_opt_tensor, iterat
         elif args.experiment == 'cifar10':
             new_data_ipt_tensor = torch.reshape(new_data_ipt_tensor, (1, new_data_ipt_tensor.size()[0], new_data_ipt_tensor.size()[1], new_data_ipt_tensor.size()[2]))
             new_data_opt_tensor = torch.unsqueeze(new_data_opt_tensor, 0)
+        elif args.experiment == 'mnist':
+            new_data_ipt_tensor = torch.reshape(new_data_ipt_tensor, (1, new_data_ipt_tensor.size()[0], new_data_ipt_tensor.size()[1], new_data_ipt_tensor.size()[2]))
+            new_data_opt_tensor = torch.unsqueeze(new_data_opt_tensor, 0)
 
     elif args.c_r_class_num == 1:
         c_r = torch.reshape(c_r, (args.training_batch_size-1,1))
@@ -82,7 +85,8 @@ def train(args, model, coreset, new_data_ipt_tensor, new_data_opt_tensor, iterat
             diter = iter(dl)
             c_n, c_r = next(diter)
 
-        c_n = torch.squeeze(c_n)
+        if args.experiment != 'mnist':
+            c_n = torch.squeeze(c_n)
         c_r = torch.squeeze(c_r)
         
         c_n = torch.cat((c_n, new_data_ipt_tensor), 0)

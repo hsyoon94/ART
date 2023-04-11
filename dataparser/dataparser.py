@@ -18,7 +18,7 @@ try:
     import rosbag
     from std_msgs.msg import Int32, String
 
-    bag = rosbag.Bag('/home/hsyoon94/bagfiles/bag_for_eval_2023-04-11-10-58-27.bag')
+    bag = rosbag.Bag('/home/hsyoon94/bagfiles/bag_for_eval_2023-04-11-12-32-11.bag')
 except ModuleNotFoundError:
     pass
 

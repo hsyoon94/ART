@@ -20,7 +20,7 @@ import wandb
 import random
 
 is_cuda = torch.cuda.is_available()
-if torch.cuda.device_count() >= 1:
+if torch.cuda.device_count() > 1:
     device = torch.device('cuda:2' if is_cuda else 'cpu')
 else:
     device = torch.device('cuda:0' if is_cuda else 'cpu')
@@ -30,6 +30,16 @@ now_time = get_time()
 
 def main():
     args = get_args()
+    if args.experiment == 'mnist':
+        args.c_n_grid_channel = 1
+        args.c_r_class_num = 10
+    elif args.experiment == 'cifar10':
+        args.c_n_grid_channel = 3
+        args.c_r_class_num = 10
+    elif args.experiment == 'cifar100':
+        args.c_n_grid_channel = 3
+        args.c_r_class_num = 100
+        
     wandb.init()
     wandb.config.update(args)
     wandb.run.name = str(now_date[2:]) + "_" + str(now_time)
@@ -118,7 +128,7 @@ def main():
 
             full_data_index = full_data_index + 1
             
-            torch.save(model, os.path.join(args.model_save_dir, "model.pt"))
+            # torch.save(model, os.path.join(args.model_save_dir, "model.pt"))
             eval_acc = evaluation(args, cycle_idx, model, eval_dataset, loss_function, device)
             evaluation_accuracy_history.append(eval_acc)
             print("===============================================================================================================\n\n")

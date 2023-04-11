@@ -2,10 +2,8 @@
 import sys
 sys.path.append('../algo')
 
-
 import numpy as np
-import rosbag
-from std_msgs.msg import Int32, String
+
 from matplotlib import pyplot as plt
 from scipy import signal
 import math
@@ -16,8 +14,13 @@ import random
 
 # roslaunch visky visky.launch
 # rosbag record -o bag_for_eval /imu/data /aft_mapped_to_init /traversability_costmap_roughness /traversability_costmap_slippage /traversability_costmap_slope /traversability_costmap_height /traversability_costmap_isground
+try:
+    import rosbag
+    from std_msgs.msg import Int32, String
 
-bag = rosbag.Bag('/home/hsyoon94/bagfiles/bag_for_eval_2023-04-11-10-58-27.bag')
+    bag = rosbag.Bag('/home/hsyoon94/bagfiles/bag_for_eval_2023-04-11-10-58-27.bag')
+except ModuleNotFoundError:
+    pass
 
 odom_topic = '/aft_mapped_to_init'
 costmap_topic_roughness = '/traversability_costmap_roughness'
@@ -477,7 +480,8 @@ def inference_data_parser(args):
     from algo.DatasetBuffer import DatasetBuffer
 
     inference_dataset = DatasetBuffer(1000, args.coreset_type, args.c_r_class_num, args.experiment, "inference")
-    f_c_n_s = np.loadtxt(os.path.join(args.dataset_dir, "inference", "data_c_n_s_inference.csv"))
+    # f_c_n_s = np.loadtxt(os.path.join(args.dataset_dir, "inference", "data_c_n_s_inference.csv"))
+    f_c_n_s = np.loadtxt(os.path.join(args.dataset_dir, "inference", "data_c_n_h_inference.csv"))
     f_c_n_r = np.loadtxt(os.path.join(args.dataset_dir, "inference", "data_c_n_r_inference.csv"))
     f_c_n_b = np.loadtxt(os.path.join(args.dataset_dir, "inference", "data_c_n_b_inference.csv"))
 

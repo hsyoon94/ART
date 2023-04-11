@@ -5,6 +5,7 @@
 *.jpeg
 runs/
 trained_models/
+trained_models/model.pt
 __pycache__
 wandb/
 inferenced_result/

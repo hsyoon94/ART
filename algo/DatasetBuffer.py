@@ -11,8 +11,10 @@ import numpy as np
 import random
 
 is_cuda = torch.cuda.is_available()
-device = torch.device('cuda' if is_cuda else 'cpu')
-
+if torch.cuda.device_count() >= 1:
+    device = torch.device('cuda:2' if is_cuda else 'cpu')
+else:
+    device = torch.device('cuda:0' if is_cuda else 'cpu')
 # Mini batch manager
 class DatasetBuffer(Dataset):
     def __init__(self, buffer_size, buffer_type, class_num, dataset_type, mode):

@@ -20,7 +20,10 @@ import wandb
 import random
 
 is_cuda = torch.cuda.is_available()
-device = torch.device('cuda' if is_cuda else 'cpu')
+if torch.cuda.device_count() >= 1:
+    device = torch.device('cuda:2' if is_cuda else 'cpu')
+else:
+    device = torch.device('cuda:0' if is_cuda else 'cpu')
 
 now_date = get_date()
 now_time = get_time()
@@ -54,7 +57,7 @@ def main():
         # Get full husky dataset
         train_dataset = raw_data_parser(args)
         eval_dataset = eval_data_parser(args)
-        inference_dataset = inference_data_parser(args)
+        # inference_dataset = inference_data_parser(args)
 
     elif args.experiment == "mnist":
         train_dataset = datasets.MNIST('dataparser/dataset/',train = True,download = True,transform = transforms.Compose([transforms.ToTensor(),transforms.Normalize((0.5), (0.5))]))

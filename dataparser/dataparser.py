@@ -15,19 +15,22 @@ from PIL import Image
 import random
 
 # roslaunch visky visky.launch
-# rosbag record -o bag_for_eval /imu/data /aft_mapped_to_init /traversability_costmap_roughness /traversability_costmap_slippage /traversability_costmap_slope
+# rosbag record -o bag_for_eval /imu/data /aft_mapped_to_init /traversability_costmap_roughness /traversability_costmap_slippage /traversability_costmap_slope /traversability_costmap_height /traversability_costmap_isground
 
-bag = rosbag.Bag('/home/hsyoon94/bagfiles/bag_for_eval_2023-03-16-10-47-33.bag')
+bag = rosbag.Bag('/home/hsyoon94/bagfiles/bag_for_eval_2023-04-11-10-58-27.bag')
 
 odom_topic = '/aft_mapped_to_init'
 costmap_topic_roughness = '/traversability_costmap_roughness'
 costmap_topic_slippage = '/traversability_costmap_slippage'
 costmap_topic_slope = '/traversability_costmap_slope'
+costmap_topic_height = '/traversability_costmap_height'
+costmap_topic_isground = '/traversability_costmap_isground'
 imu_topic = '/imu/data'
 
 costmap_data_roughness = list()
 costmap_data_slippage = list()
 costmap_data_slope = list()
+costmap_data_height = list()
 odom_data = list()
 imu_data = list()
 SHAPE_SIZE = 10
@@ -62,7 +65,7 @@ def main():
 
     occupancy_grid = np.array([])
     
-    for topic, msg, t in bag.read_messages(topics=[costmap_topic_roughness, costmap_topic_slippage, costmap_topic_slope, odom_topic, imu_topic]):
+    for topic, msg, t in bag.read_messages(topics=[costmap_topic_roughness, costmap_topic_slippage, costmap_topic_height, costmap_topic_slope, odom_topic, imu_topic]):
         if topic == costmap_topic_roughness:
             costmap_data_roughness.append(msg.data)
 
@@ -71,6 +74,9 @@ def main():
 
         elif topic == costmap_topic_slope:
             costmap_data_slope.append(msg.data)
+        
+        elif topic == costmap_topic_height:
+            costmap_data_height.append(msg.data)
 
         elif topic == odom_topic:
             odom_data.append(msg)
@@ -103,6 +109,7 @@ def main():
         
         costmap_data_roughness_element = costmap_data_roughness[costmap_idx]
         costmap_data_slippage_element = costmap_data_slippage[costmap_idx]
+        costmap_data_height_element = costmap_data_height[costmap_idx]
         costmap_data_slope_element = costmap_data_slope[costmap_idx]
 
         input_1d_array_len = len(costmap_data_roughness_element)
@@ -113,12 +120,14 @@ def main():
         
         output_2d_array_roughness = np.zeros((full_output_2d_array_size, full_output_2d_array_size))
         output_2d_array_slippage = np.zeros((full_output_2d_array_size, full_output_2d_array_size))
+        output_2d_array_height = np.zeros((full_output_2d_array_size, full_output_2d_array_size))
         output_2d_array_slope = np.zeros((full_output_2d_array_size, full_output_2d_array_size))
 
         for row_idx in range(full_output_2d_array_size):
             for col_idx in range(full_output_2d_array_size):
                 output_2d_array_roughness[row_idx][col_idx] = costmap_data_roughness_element[row_idx*full_output_2d_array_size + col_idx]
                 output_2d_array_slippage[row_idx][col_idx] = costmap_data_slippage_element[row_idx*full_output_2d_array_size + col_idx]
+                output_2d_array_height[row_idx][col_idx] = costmap_data_height_element[row_idx*full_output_2d_array_size + col_idx]
                 output_2d_array_slope[row_idx][col_idx] = costmap_data_slope_element[row_idx*full_output_2d_array_size + col_idx]
         
         # Coordinate
@@ -172,6 +181,19 @@ def main():
         final_patch_slippage[0:int(SHAPE_SIZE/2), int(SHAPE_SIZE/2):SHAPE_SIZE] = patch_lr_slippage
         final_patch_slippage[int(SHAPE_SIZE/2):SHAPE_SIZE, int(SHAPE_SIZE/2):SHAPE_SIZE] = patch_rr_slippage
         final_patch_slippage = np.reshape(final_patch_slippage,(1,SHAPE_SIZE * SHAPE_SIZE))
+
+        # Height
+        patch_lf_height = output_2d_array_height[wheel_lf_x-int(SHAPE_SIZE / (2 * 2)):wheel_lf_x+int(SHAPE_SIZE / (2 * 2)) + 1, wheel_lf_y-int(SHAPE_SIZE / (2 * 2)):wheel_lf_y+int(SHAPE_SIZE / (2 * 2)) + 1]
+        patch_rf_height = output_2d_array_height[wheel_rf_x-int(SHAPE_SIZE / (2 * 2)):wheel_rf_x+int(SHAPE_SIZE / (2 * 2)) + 1, wheel_rf_y-int(SHAPE_SIZE / (2 * 2)):wheel_rf_y+int(SHAPE_SIZE / (2 * 2)) + 1]
+        patch_lr_height = output_2d_array_height[wheel_lr_x-int(SHAPE_SIZE / (2 * 2)):wheel_lr_x+int(SHAPE_SIZE / (2 * 2)) + 1, wheel_lr_y-int(SHAPE_SIZE / (2 * 2)):wheel_lr_y+int(SHAPE_SIZE / (2 * 2)) + 1]
+        patch_rr_height = output_2d_array_height[wheel_rr_x-int(SHAPE_SIZE / (2 * 2)):wheel_rr_x+int(SHAPE_SIZE / (2 * 2)) + 1, wheel_rr_y-int(SHAPE_SIZE / (2 * 2)):wheel_rr_y+int(SHAPE_SIZE / (2 * 2)) + 1]
+
+        final_patch_height =np.zeros((SHAPE_SIZE, SHAPE_SIZE))
+        final_patch_height[0:int(SHAPE_SIZE/2), 0:int(SHAPE_SIZE/2)] = patch_lf_slippage
+        final_patch_height[int(SHAPE_SIZE/2):SHAPE_SIZE, 0:int(SHAPE_SIZE/2)] = patch_rf_slippage
+        final_patch_height[0:int(SHAPE_SIZE/2), int(SHAPE_SIZE/2):SHAPE_SIZE] = patch_lr_slippage
+        final_patch_height[int(SHAPE_SIZE/2):SHAPE_SIZE, int(SHAPE_SIZE/2):SHAPE_SIZE] = patch_rr_slippage
+        final_patch_height = np.reshape(final_patch_height,(1,SHAPE_SIZE * SHAPE_SIZE))
 
         # Robot-side Traversability
         imu_sig_numpy = np.array(imu_data[imu_idx:imu_idx+frequency_for_every_quatsec_cost_imu])
@@ -228,6 +250,9 @@ def main():
                 with open("data_c_n_s_eval.csv", "ab") as fs:
                     np.savetxt(fs,final_patch_slippage)
                 
+                with open("data_c_n_h_eval.csv", "ab") as fh:
+                    np.savetxt(fh,final_patch_height)
+                
                 file_writer_eval.writerow([traversability])
                 # file_writer_c3_eval.writerow(traversability_class3)
                 # file_writer_c5_eval.writerow(traversability_class5)
@@ -246,6 +271,9 @@ def main():
                 with open("data_c_n_s.csv", "ab") as fs:
                     np.savetxt(fs,final_patch_slippage)
                 
+                with open("data_c_n_h.csv", "ab") as fh:
+                    np.savetxt(fh,final_patch_height)
+
                 file_writer.writerow([traversability])
                 # file_writer_c3.writerow(traversability_class3)
                 # file_writer_c5.writerow(traversability_class5)
@@ -281,6 +309,15 @@ def main():
                         im.save("inference/image_slippage_0.jpg")
                     elif (LAST_TWO_COUNT - timestep_for_quatsec) == 1:
                         im.save("inference/image_slippage_1.jpg")
+
+                with open("inference/data_c_n_h_inference.csv", "ab") as fhinf:
+                    np.savetxt(fhinf,np.reshape(output_2d_array_height, (1, input_1d_array_len)))
+                    output_2d_array_height = output_2d_array_height.astype(np.uint8)
+                    im = Image.fromarray(output_2d_array_height)
+                    if (LAST_TWO_COUNT - timestep_for_quatsec) == 2:
+                        im.save("inference/image_height_0.jpg")
+                    elif (LAST_TWO_COUNT - timestep_for_quatsec) == 1:
+                        im.save("inference/image_height_1.jpg")
         
         print("Timestep", timestep)
         timestep = timestep + 1
@@ -310,7 +347,8 @@ def remove_old_files():
         os.remove('data_c_n_s.csv')
     if os.path.exists('data_c_n_r.csv'):
         os.remove('data_c_n_r.csv')
-
+    if os.path.exists('data_c_n_h.csv'):
+        os.remove('data_c_n_h.csv')
 
     if os.path.exists('data_c_r_eval.csv'):
         os.remove('data_c_r_eval.csv')
@@ -327,6 +365,8 @@ def remove_old_files():
         os.remove('data_c_n_s_eval.csv')
     if os.path.exists('data_c_n_r_eval.csv'):
         os.remove('data_c_n_r_eval.csv')
+    if os.path.exists('data_c_n_h_eval.csv'):
+        os.remove('data_c_n_h_eval.csv')
 
     if os.path.exists('inference/data_c_n_b_inference.csv'):
         os.remove('inference/data_c_n_b_inference.csv')
@@ -334,13 +374,16 @@ def remove_old_files():
         os.remove('inference/data_c_n_s_inference.csv')
     if os.path.exists('inference/data_c_n_r_inference.csv'):
         os.remove('inference/data_c_n_r_inference.csv')
+    if os.path.exists('inference/data_c_n_h_inference.csv'):
+        os.remove('inference/data_c_n_h_inference.csv')
 
 def raw_data_parser(args):
 
     from algo.DatasetBuffer import DatasetBuffer
 
     coreset = DatasetBuffer(100000, args.coreset_type, args.c_r_class_num, args.experiment, "train")
-    f_c_n_s = np.loadtxt(os.path.join(args.dataset_dir, "data_c_n_s.csv"))
+    # f_c_n_s = np.loadtxt(os.path.join(args.dataset_dir, "data_c_n_s.csv"))
+    f_c_n_s = np.loadtxt(os.path.join(args.dataset_dir, "data_c_n_h.csv"))
     f_c_n_r = np.loadtxt(os.path.join(args.dataset_dir, "data_c_n_r.csv"))
     f_c_n_b = np.loadtxt(os.path.join(args.dataset_dir, "data_c_n_b.csv"))
 

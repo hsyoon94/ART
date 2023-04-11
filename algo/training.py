@@ -4,50 +4,6 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 import wandb
 
-def train_benchmark_dataset(args, model, dataset, criteria, optimizer, scheduler, device):
-    model.train()
-    dl = DataLoader(dataset, batch_size=args.training_batch_size, shuffle=True, sampler=None, num_workers=0, pin_memory=False, drop_last=True)
-    diter = iter(dl)
-
-    for iter_tmp in range(args.iteration):
-        try:
-            c_n, c_r = next(diter)
-        except StopIteration:
-            diter = iter(dl)
-            c_n, c_r = next(diter)
-        
-    
-        c_n = c_n.type(torch.FloatTensor)
-        c_r = c_r.type(torch.LongTensor)
-
-        c_n = c_n.to(device)
-        c_r = c_r.to(device)
-        
-        output = model(c_n).squeeze()
-        # Compute Loss term
-        loss = criteria(output, c_r)
-
-        # Compute Regularization Term
-        if args.regularization_type == 'l2':
-            regularization_weight = args.reg_lambda
-        else:
-            regularization_weight = 0
-
-        reg = torch.tensor(0.).to(device)
-
-        for param in model.parameters():
-            reg = reg + torch.norm(param)
-        
-        loss = loss + regularization_weight * reg
-
-        loss.backward()
-        optimizer.step()
-        optimizer.zero_grad()
-        scheduler.step()
-        wandb.log({
-            "train_loss": loss.item(),
-        })
-
 def train_offline(args, model, dataset, criteria, optimizer, scheduler, device):
     model.train()
     

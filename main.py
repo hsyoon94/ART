@@ -2,11 +2,11 @@ import numpy as np
 import torch
 from algo.ART import ART
 from algo.DatasetBuffer import DatasetBuffer
-from algo.training import train, train_offline, train_benchmark_dataset, evaluation, inference
+from algo.training import train, train_offline, evaluation, inference
 from dataparser.dataparser import raw_data_parser, inference_data_parser, eval_data_parser
 from arguments import get_args
 from torch.utils.data import DataLoader
-from torchvision import datasets, transforms
+from torchvision import datasets, transforms, models
 from torchsampler import ImbalancedDatasetSampler
 from PIL import Image
 import os
@@ -33,7 +33,13 @@ def main():
     evaluation_accuracy_history = list()
     softmax = nn.Softmax(dim=1)
 
-    model = ART(args.c_n_grid_channel, args.c_r_class_num, args.dropout_rate, args.training_batch_size, args.experiment, device)
+    if args.model == 'resnet18':
+        model = models.resnet18(pretrained=False)
+        num_ftrs = model.fc.in_features
+        model.fc = nn.Linear(num_ftrs, args.c_r_class_num)
+        model = model.to(device)
+    elif args.model == 'art':
+        model = ART(args.c_n_grid_channel, args.c_r_class_num, args.dropout_rate, args.training_batch_size, args.experiment, device)
     wandb.watch(model)
 
     if args.c_r_class_num == 1:
@@ -98,7 +104,7 @@ def main():
                 coreset.append(new_data_ipt, new_data_opt, model, args.network_ensemble_cycle)
             print("===============================================================================================================")
             print("Exp time:", str(now_date[2:]) + "_" + str(now_time))
-            print("Corseet updated with cycle", cycle_idx+1, "/", args.training_cycle, ". Class", new_data_opt_tensor.item(), "appended")
+            print("Corseet updated with cycle", cycle_idx+1, "/", args.training_cycle, ". Class", int(new_data_opt_tensor.item()), "appended")
             print()
             for class_idx in range(args.c_r_class_num):
                 print(" Class" + str(class_idx), end="    ")

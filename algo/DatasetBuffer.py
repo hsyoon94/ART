@@ -55,12 +55,6 @@ class ARTBuffer(Dataset):
         if self.mode == "train":
             
             if self.class_num != 1:
-                # if isinstance(opt, np.ndarray):
-                #     opt_idx = int(opt[0])
-                # else:
-                #     opt_idx = opt
-                print("new ipt", ipt)
-                print("new opt", opt)
 
                 for pair in zip(ipt, opt):
                     ipt_post = pair[0]
@@ -260,7 +254,7 @@ class ARTBuffer(Dataset):
         elif self.mode == "inference":
             ipt_post = np.array([ipt])
             self.c_n.append(ipt_post)
-            
+
     def __getitem__(self, idx):
         if self.mode == "train":
             return [self.c_n[idx], self.c_r[idx]]

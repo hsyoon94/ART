@@ -1,0 +1,56 @@
+[1mdiff --git a/algo/DatasetBuffer.py b/algo/DatasetBuffer.py[m
+[1mindex e69ee94..973d28f 100644[m
+[1m--- a/algo/DatasetBuffer.py[m
+[1m+++ b/algo/DatasetBuffer.py[m
+[36m@@ -11,7 +11,7 @@[m [mimport numpy as np[m
+ import random[m
+ [m
+ is_cuda = torch.cuda.is_available()[m
+[31m-device = torch.device('cuda' if is_cuda else 'cpu')[m
+[32m+[m[32mdevice = torch.device('cuda:2' if is_cuda else 'cpu')[m
+ [m
+ # Mini batch manager[m
+ class DatasetBuffer(Dataset):[m
+[1mdiff --git a/algo/__pycache__/ART.cpython-38.pyc b/algo/__pycache__/ART.cpython-38.pyc[m
+[1mindex 073ae06..23ab250 100644[m
+Binary files a/algo/__pycache__/ART.cpython-38.pyc and b/algo/__pycache__/ART.cpython-38.pyc differ
+[1mdiff --git a/dataparser/dataparser.py b/dataparser/dataparser.py[m
+[1mindex 4c1872b..f835eaf 100644[m
+[1m--- a/dataparser/dataparser.py[m
+[1m+++ b/dataparser/dataparser.py[m
+[36m@@ -4,8 +4,8 @@[m [msys.path.append('../algo')[m
+ [m
+ [m
+ import numpy as np[m
+[31m-import rosbag[m
+[31m-from std_msgs.msg import Int32, String[m
+[32m+[m[32m# import rosbag[m
+[32m+[m[32m# from std_msgs.msg import Int32, String[m
+ from matplotlib import pyplot as plt[m
+ from scipy import signal[m
+ import math[m
+[36m@@ -17,7 +17,7 @@[m [mimport random[m
+ # roslaunch visky visky.launch[m
+ # rosbag record -o bag_for_eval /imu/data /aft_mapped_to_init /traversability_costmap_roughness /traversability_costmap_slippage /traversability_costmap_slope[m
+ [m
+[31m-bag = rosbag.Bag('/home/hsyoon94/bagfiles/bag_for_eval_2023-03-16-10-47-33.bag')[m
+[32m+[m[32m# bag = rosbag.Bag('/home/hsyoon94/bagfiles/bag_for_eval_2023-03-16-10-47-33.bag')[m
+ [m
+ odom_topic = '/aft_mapped_to_init'[m
+ costmap_topic_roughness = '/traversability_costmap_roughness'[m
+[1mdiff --git a/main.py b/main.py[m
+[1mindex 9876822..2e4652d 100644[m
+[1m--- a/main.py[m
+[1m+++ b/main.py[m
+[36m@@ -20,7 +20,7 @@[m [mimport wandb[m
+ import random[m
+ [m
+ is_cuda = torch.cuda.is_available()[m
+[31m-device = torch.device('cuda' if is_cuda else 'cpu')[m
+[32m+[m[32mdevice = torch.device('cuda:2' if is_cuda else 'cpu')[m
+ [m
+ now_date = get_date()[m
+ now_time = get_time()[m
+[1mdiff --git a/trained_models/model.pt b/trained_models/model.pt[m
+[1mindex 559571b..3e861d5 100644[m
+Binary files a/trained_models/model.pt and b/trained_models/model.pt differ

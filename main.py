@@ -39,17 +39,20 @@ def main():
     elif args.experiment == 'cifar100':
         args.c_n_grid_channel = 3
         args.c_r_class_num = 100
-        
+
+    experiment_info = str(now_date[2:]) + "_" + str(now_time) + "_" + str(args.model) + "_" + str(args.experiment) + "_reg:" +  str(args.regularization_type) + "(" + str(args.reg_lambda) + ")_ctype:" + str(args.coreset_type) + "(" + str(args.greedy_degree) + ")"
+
     wandb.init()
     wandb.config.update(args)
     wandb.run.name = str(now_date[2:]) + "_" + str(now_time)
     evaluation_accuracy_history = list()
+    evaluation_accuracy_after_coreset_update_algo_operation_history = list()
     softmax = nn.Softmax(dim=1)
 
     if args.model == 'resnet18':
-        model = models.resnet18(pretrained=False)
+        model = models.resnet18(weights=None)
         num_ftrs = model.fc.in_features
-        model.fc = nn.Linear(num_ftrs, args.c_r_class_num)
+        model.fc = nn.Sequential(nn.Dropout(args.dropout_rate), nn.Linear(num_ftrs, args.c_r_class_num))
         model = model.to(device)
     elif args.model == 'art':
         model = ART(args.c_n_grid_channel, args.c_r_class_num, args.dropout_rate, args.training_batch_size, args.experiment, device)
@@ -91,10 +94,12 @@ def main():
     elif args.offline_learning is False:
         coreset = DatasetBuffer(args.coreset_buffer_size, args.coreset_type, args.c_r_class_num, args.experiment, "train")
         rnd_idx = random.sample(range(len(train_dataset)), len(train_dataset))
-        for i in range(args.coreset_buffer_size):
-            coreset.append(train_dataset[rnd_idx[i]][0], train_dataset[rnd_idx[i]][1], None, 0)
+        CORESET_INITIALIZE_SIZE = int(args.coreset_buffer_size * 0.95 * args.c_r_class_num)
+
+        for i in range(CORESET_INITIALIZE_SIZE):
+            coreset.append(train_dataset[rnd_idx[i]][0], train_dataset[rnd_idx[i]][1], model, args.network_ensemble_cycle)
         
-        full_data_index = args.coreset_buffer_size
+        full_data_index = CORESET_INITIALIZE_SIZE
 
         for cycle_idx in range(args.training_cycle):
             
@@ -116,7 +121,8 @@ def main():
             if new_data_ipt_tensor is not None:
                 coreset.append(new_data_ipt, new_data_opt, model, args.network_ensemble_cycle)
             print("===============================================================================================================")
-            print("Exp time:", str(now_date[2:]) + "_" + str(now_time))
+            
+            print("Exp info:", experiment_info)
             print("Corseet updated with cycle", cycle_idx+1, "/", args.training_cycle, ". Class", int(new_data_opt_tensor.item()), "appended")
             print()
             for class_idx in range(args.c_r_class_num):
@@ -128,26 +134,46 @@ def main():
 
             full_data_index = full_data_index + 1
             
-            # torch.save(model, os.path.join(args.model_save_dir, "model.pt"))
             eval_acc = evaluation(args, cycle_idx, model, eval_dataset, loss_function, device)
             evaluation_accuracy_history.append(eval_acc)
+
+            if coreset.coreset_management_start is True:
+                evaluation_accuracy_after_coreset_update_algo_operation_history.append(eval_acc)
             print("===============================================================================================================\n\n")
             # inference(args, cycle_idx, model, inference_dataset)
 
-        
     print("========== Training Ends  ===========")
+    # Experiment logging...
     evaluation_accuracy_history_np = np.array(evaluation_accuracy_history)
     value_mean = np.mean(evaluation_accuracy_history_np)
     value_std = np.std(evaluation_accuracy_history_np)
-    print("Eval accuracy mean:", value_mean)
-    print("Eval accuracy std:", value_std)
-    eval_result_plot_dir = os.path.join('./inferenced_result/evaluation_acc/', str(now_date[2:]) + "_" + str(now_time)+".txt")
-    with open(eval_result_plot_dir, 'w') as file:
-        file.write(str(value_mean)+"\n")
-        file.write(str(value_std))
 
+    evaluation_accuracy_after_coreset_update_algo_operation_history_np = np.array(evaluation_accuracy_after_coreset_update_algo_operation_history)
+    value_after_mean = np.mean(evaluation_accuracy_after_coreset_update_algo_operation_history_np)
+    value_after_std = np.std(evaluation_accuracy_after_coreset_update_algo_operation_history_np)
+    
+    max_acc = np.max(evaluation_accuracy_history_np)
+    max_acc_idx = np.argmax(evaluation_accuracy_history_np)
+    forgetting_score_overall = 0.0
+    forgetting_score_after = 0.0
+    for history_idx in range(len(evaluation_accuracy_history)):
+        forgetting_score_overall = forgetting_score_overall + (max_acc - evaluation_accuracy_history_np[history_idx])
+    forgetting_score_overall = forgetting_score_overall / len(evaluation_accuracy_history)
 
+    for history_idx2 in range(max_acc_idx, len(evaluation_accuracy_history)):
+        forgetting_score_after = forgetting_score_after + (max_acc - evaluation_accuracy_history_np[history_idx])
+    forgetting_score_after = forgetting_score_after / (len(evaluation_accuracy_history) - max_acc_idx)
+    
+    args.evaluation_accuracy_mean = value_mean
+    args.evaluation_accuracy_std = value_std
 
+    args.evaluation_accuracy_after_mean = value_after_mean
+    args.evaluation_accuracy_after_std = value_after_std
+
+    args.forgetting_score_overall = forgetting_score_overall
+    args.forgetting_score_after = forgetting_score_after
+    
+    wandb.config.update(args, allow_val_change=True)
 
 if __name__ == '__main__':
     main()

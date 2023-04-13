@@ -25,11 +25,11 @@ class ART(nn.Module):
         if self.experiment == 'husky':
             self.f1_input_dim = 128 * int(self.training_batch_size / 8)
         elif self.experiment == 'mnist':
-            self.f1_input_dim = 3872
+            self.f1_input_dim = 3872 * int(self.training_batch_size / 8) 
         elif self.experiment == 'cifar10':
-            self.f1_input_dim = 5408
+            self.f1_input_dim = 5408 * int(self.training_batch_size / 8)
         elif self.experiment == 'cifar100':
-            self.f1_input_dim = 5408
+            self.f1_input_dim = 5408 * int(self.training_batch_size / 8)
         elif self.experiment == 'imagenet':
             self.f1_input_dim = 5408
 

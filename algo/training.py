@@ -3,82 +3,50 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 import wandb
-
-def train_offline(args, model, dataset, criteria, optimizer, scheduler, device):
-    model.train()
-    
-    # dl = DataLoader(dataset, batch_size=args.training_batch_size, shuffle=False, sampler=ImbalancedDatasetSampler(dataset), num_workers=0, pin_memory=False, drop_last=True)
-    dl = DataLoader(dataset, batch_size=args.training_batch_size, shuffle=True, sampler=None, num_workers=0, pin_memory=False, drop_last=True)
-    diter = iter(dl)
-
-    for iter_tmp in range(args.iteration):
-        try:
-            c_n, c_r = next(diter)
-        except StopIteration:
-            diter = iter(dl)
-            c_n, c_r = next(diter)
-
-        if args.experiment != 'mnist':
-            c_n = torch.squeeze(c_n)
-        # c_n = torch.squeeze(c_n)
-        c_r = torch.squeeze(c_r)
-        c_n = c_n.type(torch.FloatTensor)
-        c_r = c_r.type(torch.LongTensor)
-
-        c_n = c_n.to(device)
-        c_r = c_r.to(device)
-        
-        output = model(c_n).squeeze()
-        # Compute Loss term
-        loss = criteria(output, c_r)
-
-        # Compute Regularization Term
-        if args.regularization_type == 'l2':
-            regularization_weight = args.reg_lambda
-        else:
-            regularization_weight = 0
-
-        reg = torch.tensor(0.).to(device)
-
-        for param in model.parameters():
-            reg = reg + torch.norm(param)
-        
-        loss = loss + regularization_weight * reg
-
-        loss.backward()
-        optimizer.step()
-        optimizer.zero_grad()
-        scheduler.step()
-        wandb.log({
-            "train_loss": loss.item(),
-        })
+import random
 
 
 def train(args, model, coreset, new_data_ipt_tensor, new_data_opt_tensor, iteration, cycle, criteria, optimizer, scheduler, device):
     
-    if args.c_r_class_num != 1:
-        # dl = DataLoader(coreset, batch_size=args.training_batch_size-1, shuffle=False, sampler=ImbalancedDatasetSampler(coreset), num_workers=0, pin_memory=False, drop_last=True)
-        dl = DataLoader(coreset, batch_size=args.training_batch_size-1, shuffle=True, sampler=None, num_workers=0, pin_memory=False, drop_last=True)
-    elif args.c_r_class_num == 1:
-        dl = DataLoader(coreset, batch_size=args.training_batch_size-1, shuffle=True, sampler=None, num_workers=0, pin_memory=False, drop_last=True)
-    diter = iter(dl)
+    # Determine whether conduct greedy training
+    random_probability = random.uniform(0, 1)
+    if random_probability <= args.greedy_degree:
+        UNCONDITIONAL_TRAINING = True
+    else:
+        UNCONDITIONAL_TRAINING = False
 
     if args.c_r_class_num != 1:
-        if args.experiment == 'husky':
-            if new_data_opt_tensor.size()[0] == 10:
-                new_data_opt_tensor = torch.reshape(new_data_opt_tensor, (1, new_data_opt_tensor.size()[0]))
-        elif args.experiment == 'cifar10':
-            new_data_ipt_tensor = torch.reshape(new_data_ipt_tensor, (1, new_data_ipt_tensor.size()[0], new_data_ipt_tensor.size()[1], new_data_ipt_tensor.size()[2]))
-            new_data_opt_tensor = torch.unsqueeze(new_data_opt_tensor, 0)
-        elif args.experiment == 'mnist':
-            new_data_ipt_tensor = torch.reshape(new_data_ipt_tensor, (1, new_data_ipt_tensor.size()[0], new_data_ipt_tensor.size()[1], new_data_ipt_tensor.size()[2]))
-            new_data_opt_tensor = torch.unsqueeze(new_data_opt_tensor, 0)
-
+        dl_greedy_x = DataLoader(coreset, batch_size=args.training_batch_size, shuffle=True, sampler=None, num_workers=0, pin_memory=False, drop_last=True)
+        dl_greedy_o = DataLoader(coreset, batch_size=args.training_batch_size-1, shuffle=True, sampler=None, num_workers=0, pin_memory=False, drop_last=True)
+        
     elif args.c_r_class_num == 1:
-        c_r = torch.reshape(c_r, (args.training_batch_size-1,1))
-        new_data_opt_tensor = torch.reshape(new_data_opt_tensor, (1,1))
+        dl_greedy_x = DataLoader(coreset, batch_size=args.training_batch_size, shuffle=True, sampler=None, num_workers=0, pin_memory=False, drop_last=True)
+        dl_greedy_o = DataLoader(coreset, batch_size=args.training_batch_size-1, shuffle=True, sampler=None, num_workers=0, pin_memory=False, drop_last=True)
+
+    diter_greedy_x = iter(dl_greedy_x)
+    diter_greedy_o = iter(dl_greedy_o)
+
+    if UNCONDITIONAL_TRAINING is True:
+        if args.c_r_class_num != 1:
+            if args.experiment == 'husky':
+                if new_data_opt_tensor.size()[0] == 10:
+                    new_data_opt_tensor = torch.reshape(new_data_opt_tensor, (1, new_data_opt_tensor.size()[0]))
+            else:
+                new_data_ipt_tensor = torch.reshape(new_data_ipt_tensor, (1, new_data_ipt_tensor.size()[0], new_data_ipt_tensor.size()[1], new_data_ipt_tensor.size()[2]))
+                new_data_opt_tensor = torch.unsqueeze(new_data_opt_tensor, 0)
+
+        elif args.c_r_class_num == 1:
+            c_r = torch.reshape(c_r, (args.training_batch_size-1,1))
+            new_data_opt_tensor = torch.reshape(new_data_opt_tensor, (1,1))
 
     for iter_tmp in range(args.iteration):
+        if UNCONDITIONAL_TRAINING is True:
+            diter = diter_greedy_o
+            dl = dl_greedy_o
+        else:
+            diter = diter_greedy_x
+            dl = dl_greedy_x
+
         try:
             c_n, c_r = next(diter)
         except StopIteration:
@@ -89,8 +57,9 @@ def train(args, model, coreset, new_data_ipt_tensor, new_data_opt_tensor, iterat
             c_n = torch.squeeze(c_n)
         c_r = torch.squeeze(c_r)
         
-        c_n = torch.cat((c_n, new_data_ipt_tensor), 0)
-        c_r = torch.cat((c_r, new_data_opt_tensor), 0)
+        if UNCONDITIONAL_TRAINING is True:
+            c_n = torch.cat((c_n, new_data_ipt_tensor), 0)
+            c_r = torch.cat((c_r, new_data_opt_tensor), 0)
 
         c_n = c_n.type(torch.FloatTensor)
         c_r = c_r.type(torch.LongTensor)
@@ -140,6 +109,55 @@ def train(args, model, coreset, new_data_ipt_tensor, new_data_opt_tensor, iterat
         wandb.log({
             "train_loss": loss.item(),
             "Uncertainty": uncertainty
+        })
+
+
+def train_offline(args, model, dataset, criteria, optimizer, scheduler, device):
+    model.train()
+    
+    # dl = DataLoader(dataset, batch_size=args.training_batch_size, shuffle=False, sampler=ImbalancedDatasetSampler(dataset), num_workers=0, pin_memory=False, drop_last=True)
+    dl = DataLoader(dataset, batch_size=args.training_batch_size, shuffle=True, sampler=None, num_workers=0, pin_memory=False, drop_last=True)
+    diter = iter(dl)
+
+    for iter_tmp in range(args.iteration):
+        try:
+            c_n, c_r = next(diter)
+        except StopIteration:
+            diter = iter(dl)
+            c_n, c_r = next(diter)
+
+        if args.experiment != 'mnist':
+            c_n = torch.squeeze(c_n)
+        c_r = torch.squeeze(c_r)
+        c_n = c_n.type(torch.FloatTensor)
+        c_r = c_r.type(torch.LongTensor)
+
+        c_n = c_n.to(device)
+        c_r = c_r.to(device)
+        
+        output = model(c_n).squeeze()
+        # Compute Loss term
+        loss = criteria(output, c_r)
+
+        # Compute Regularization Term
+        if args.regularization_type == 'l2':
+            regularization_weight = args.reg_lambda
+        else:
+            regularization_weight = 0
+
+        reg = torch.tensor(0.).to(device)
+
+        for param in model.parameters():
+            reg = reg + torch.norm(param)
+        
+        loss = loss + regularization_weight * reg
+
+        loss.backward()
+        optimizer.step()
+        optimizer.zero_grad()
+        scheduler.step()
+        wandb.log({
+            "train_loss": loss.item(),
         })
 
 

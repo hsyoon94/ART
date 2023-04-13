@@ -15,6 +15,7 @@ if torch.cuda.device_count() > 1:
     device = torch.device('cuda:2' if is_cuda else 'cpu')
 else:
     device = torch.device('cuda:0' if is_cuda else 'cpu')
+
 # Mini batch manager
 class DatasetBuffer(Dataset):
     def __init__(self, buffer_size, buffer_type, class_num, dataset_type, mode):
@@ -27,6 +28,7 @@ class DatasetBuffer(Dataset):
         self.c_r = list()
         self.softmax = nn.Softmax(dim=1)
         self.dataset_type = dataset_type
+        self.coreset_management_start = False
         
         self.c_n_classwise = list()
         self.c_r_classwise = list()
@@ -57,41 +59,66 @@ class DatasetBuffer(Dataset):
                 else:
                     opt_idx = opt
                 
-                if len(self.c_n_classwise[opt_idx]) >= self.buffer_size:
-                    if self.buffer_type == 'fifo':
-                        self.c_n_classwise[opt_idx].pop()
-                        self.c_r_classwise[opt_idx].pop()
-                    
-                    elif self.buffer_type == 'random':
-                        rnd_idx = np.random.randint(self.buffer_size, size=1)
-                        self.c_n_classwise[opt_idx].pop(rnd_idx[0])
-                        self.c_r_classwise[opt_idx].pop(rnd_idx[0])
-                    
-                    elif self.buffer_type == 'ucm':
-                        with torch.no_grad():
-                            tmp_input = torch.tensor(self.c_n_classwise[opt_idx]).squeeze().type(torch.FloatTensor).to(device)                            
-                            output_softmax_history = torch.empty((ensemble_cycle, len(self.c_n_classwise[opt_idx]), self.class_num))
-
-                            for ensemble_idx in range(ensemble_cycle):
-                                output = model(tmp_input).squeeze()
-                                output_softmax = self.softmax(output).detach()
-                                output_softmax_history[ensemble_idx, :, :] = output_softmax
-                                
-                            output_std = torch.std(output_softmax_history, 0, True).squeeze()
-                            output_std_sum = torch.sum(output_std, 1)
-                            output_std_argmin_idx = torch.argmin(output_std_sum)
-                            
-                            self.c_n_classwise[opt_idx].pop(output_std_argmin_idx)
-                            self.c_r_classwise[opt_idx].pop(output_std_argmin_idx)
-
+                # Input data process
                 if self.dataset_type == 'husky':
                     ipt_post = np.array([ipt])
                 else:
                     ipt_post = ipt
                 opt_post = opt
 
-                self.c_n_classwise[opt_idx].append(ipt_post)
-                self.c_r_classwise[opt_idx].append(opt_post)
+                # Pop if full size
+                if len(self.c_n_classwise[opt_idx]) >= self.buffer_size:
+                    self.coreset_management_start = True
+
+                    if self.buffer_type == 'fifo':
+                        self.c_n_classwise[opt_idx].pop()
+                        self.c_r_classwise[opt_idx].pop()
+
+                        self.c_n_classwise[opt_idx].append(ipt_post)
+                        self.c_r_classwise[opt_idx].append(opt_post)
+
+                    elif self.buffer_type == 'random':
+                        rnd_idx = np.random.randint(self.buffer_size, size=1)
+                        self.c_n_classwise[opt_idx].pop(rnd_idx[0])
+                        self.c_r_classwise[opt_idx].pop(rnd_idx[0])
+
+                        self.c_n_classwise[opt_idx].append(ipt_post)
+                        self.c_r_classwise[opt_idx].append(opt_post)
+                    
+                    elif self.buffer_type == 'ucm':
+                        with torch.no_grad():
+                            tmp_input = torch.stack(self.c_n_classwise[opt_idx], dim=0).type(torch.FloatTensor).to(device)
+                            output_softmax_list = list()
+                            
+                            for ensemble_idx in range(ensemble_cycle):
+                                
+                                output = model(tmp_input).squeeze()
+                                output_softmax = self.softmax(output).detach()
+                                output_softmax_list.append(output_softmax)
+
+                            output_softmax_history = torch.stack(output_softmax_list, dim=0).to(device)
+                            output_std = torch.std(output_softmax_history, 0, True).squeeze()
+                            
+                            output_std_sum = torch.sum(output_std, 1)
+                            
+                            output_std_argmin_idx = torch.argmin(output_std_sum)
+                            
+                            self.c_n_classwise[opt_idx].pop(output_std_argmin_idx)
+                            self.c_r_classwise[opt_idx].pop(output_std_argmin_idx)
+                            
+                            self.c_n_classwise[opt_idx].append(ipt_post)
+                            self.c_r_classwise[opt_idx].append(opt_post)
+
+                    elif self.buffer_type == 'reservoir':
+                        rnd_idx = int(random.random() * (self.buffer_size + 1))
+                        if rnd_idx < self.buffer_size:
+                            self.c_n_classwise[opt_idx][rnd_idx] = ipt_post
+                            self.c_r_classwise[opt_idx][rnd_idx] = opt_post
+                    
+                else:
+                    self.c_n_classwise[opt_idx].append(ipt_post)
+                    self.c_r_classwise[opt_idx].append(opt_post)
+                
                 cur_buffer_length = 0
 
                 for i in range(self.class_num):

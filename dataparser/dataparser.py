@@ -382,9 +382,9 @@ def remove_old_files():
 
 def raw_data_parser(args):
 
-    from algo.DatasetBuffer import DatasetBuffer
+    from algo.DatasetBuffer import ARTBuffer
 
-    coreset = DatasetBuffer(100000, args.coreset_type, args.c_r_class_num, args.experiment, "train")
+    coreset = ARTBuffer(10000000, args.coreset_type, args.c_r_class_num, args.experiment, "train")
     # f_c_n_s = np.loadtxt(os.path.join(args.dataset_dir, "data_c_n_s.csv"))
     f_c_n_s = np.loadtxt(os.path.join(args.dataset_dir, "data_c_n_h.csv"))
     f_c_n_r = np.loadtxt(os.path.join(args.dataset_dir, "data_c_n_r.csv"))
@@ -430,8 +430,8 @@ def raw_data_parser(args):
 
 def eval_data_parser(args):
 
-    from algo.DatasetBuffer import DatasetBuffer
-    coreset = DatasetBuffer(100000, args.coreset_type, args.c_r_class_num, args.experiment, "train")
+    from algo.DatasetBuffer import ARTBuffer
+    coreset = ARTBuffer(10000000, args.coreset_type, args.c_r_class_num, args.experiment, "train")
     f_c_n_s = np.loadtxt(os.path.join(args.dataset_dir, "data_c_n_s_eval.csv"))
     f_c_n_r = np.loadtxt(os.path.join(args.dataset_dir, "data_c_n_r_eval.csv"))
     f_c_n_b = np.loadtxt(os.path.join(args.dataset_dir, "data_c_n_b_eval.csv"))
@@ -477,9 +477,9 @@ def eval_data_parser(args):
 
 def inference_data_parser(args):
 
-    from algo.DatasetBuffer import DatasetBuffer
+    from algo.DatasetBuffer import ARTBuffer
 
-    inference_dataset = DatasetBuffer(1000, args.coreset_type, args.c_r_class_num, args.experiment, "inference")
+    inference_dataset = ARTBuffer(1000, args.coreset_type, args.c_r_class_num, args.experiment, "inference")
     # f_c_n_s = np.loadtxt(os.path.join(args.dataset_dir, "inference", "data_c_n_s_inference.csv"))
     f_c_n_s = np.loadtxt(os.path.join(args.dataset_dir, "inference", "data_c_n_h_inference.csv"))
     f_c_n_r = np.loadtxt(os.path.join(args.dataset_dir, "inference", "data_c_n_r_inference.csv"))
